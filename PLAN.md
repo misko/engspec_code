@@ -141,7 +141,7 @@ Example: for `src/models/backbone.py`, generates `src/models/backbone.engspec`:
 <!-- engspec v1 -->
 <!-- source: src/models/backbone.py -->
 <!-- language: python -->
-<!-- hash: sha256:abc123 -->
+<!-- model: claude-opus-4-6 -->
 <!-- status: skeleton -->
 
 ## `forward(self, data: AtomicData) -> dict[str, Tensor]`
@@ -191,7 +191,7 @@ After the swarm agent fills in and validates the spec:
 <!-- engspec v1 -->
 <!-- source: src/models/backbone.py -->
 <!-- language: python -->
-<!-- hash: sha256:abc123 -->
+<!-- model: claude-opus-4-6 -->
 <!-- status: validated -->
 <!-- validated: 2026-03-14T10:30:00Z -->
 <!-- regeneration_count: 5 -->
@@ -374,7 +374,7 @@ class ContextInfo:
 class EngspecFile:
     source_path: str
     language: str                     # python, rust, go, cpp, etc.
-    source_hash: str
+    model: str
     status: str                       # "skeleton" or "validated"
     validated: datetime | None
     regeneration_count: int

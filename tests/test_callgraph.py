@@ -72,7 +72,7 @@ def test_build_call_graph_manual():
     ef = EngspecFile(
         source_path="test.py",
         language="python",
-        source_hash="",
+        model="claude-opus-4-6",
         specs={
             "main": _make_spec("main()", calls=["process()"]),
             "process": _make_spec(

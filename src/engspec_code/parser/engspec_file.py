@@ -64,7 +64,7 @@ class EngspecFile:
 
     source_path: str
     language: str
-    source_hash: str
+    model: str = ""
     status: str = "skeleton"
     validated: datetime | None = None
     regeneration_count: int = 0
@@ -100,7 +100,7 @@ class EngspecFile:
         metadata = _parse_metadata(text)
         source_path = metadata.get("source", "")
         language = metadata.get("language", "")
-        source_hash = metadata.get("hash", "")
+        model = metadata.get("model", "")
         status = metadata.get("status", "skeleton")
 
         validated = None
@@ -126,7 +126,7 @@ class EngspecFile:
         return cls(
             source_path=source_path,
             language=language,
-            source_hash=source_hash,
+            model=model,
             status=status,
             validated=validated,
             regeneration_count=regen_count,
@@ -147,7 +147,7 @@ class EngspecFile:
         lines.append("<!-- engspec v1 -->")
         lines.append(f"<!-- source: {self.source_path} -->")
         lines.append(f"<!-- language: {self.language} -->")
-        lines.append(f"<!-- hash: {self.source_hash} -->")
+        lines.append(f"<!-- model: {self.model} -->")
         lines.append(f"<!-- status: {self.status} -->")
 
         if self.validated is not None:

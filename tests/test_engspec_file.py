@@ -28,7 +28,7 @@ def test_parse_sample_engspec():
 
     assert ef.source_path == "tests/fixtures/sample.py"
     assert ef.language == "python"
-    assert ef.source_hash == "sha256:abc123"
+    assert ef.model == "claude-opus-4-6"
     assert ef.status == "validated"
     assert ef.validated is not None
     assert ef.regeneration_count == 5
@@ -91,7 +91,7 @@ def test_serialize_roundtrip():
 
     assert ef2.source_path == ef.source_path
     assert ef2.language == ef.language
-    assert ef2.source_hash == ef.source_hash
+    assert ef2.model == ef.model
     assert ef2.status == ef.status
     assert ef2.regeneration_count == ef.regeneration_count
     assert ef2.regeneration_pass_rate == ef.regeneration_pass_rate
@@ -116,7 +116,7 @@ def test_serialize_skeleton():
     ef = EngspecFile(
         source_path="src/foo.py",
         language="python",
-        source_hash="sha256:deadbeef",
+        model="claude-opus-4-6",
         status="skeleton",
         specs={
             "bar": EngSpec(
@@ -175,7 +175,7 @@ def test_construct_engspec_manually():
     ef = EngspecFile(
         source_path="greet.py",
         language="python",
-        source_hash="sha256:111",
+        model="claude-opus-4-6",
         status="validated",
         validated=datetime(2026, 3, 14, 12, 0, 0, tzinfo=timezone.utc),
         regeneration_count=3,

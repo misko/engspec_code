@@ -110,7 +110,7 @@ Every `.engspec` file MUST follow this structure. Copy it, fill in the `{placeho
 <!-- engspec v1 -->
 <!-- source: {relative/path/to/source.ext} -->
 <!-- language: {python|rust|go|cpp|c|javascript|typescript|java} -->
-<!-- hash: sha256:{actual hash of source file} -->
+<!-- model: {model used to generate this spec, e.g. claude-opus-4-6} -->
 <!-- status: {skeleton|validated|failed} -->
 <!-- validated: {ISO 8601 timestamp, omit if not yet validated} -->
 <!-- regeneration_count: {total attempts, omit if not yet validated} -->
@@ -404,7 +404,7 @@ The `.engspec` would be:
 <!-- engspec v1 -->
 <!-- source: math_utils.py -->
 <!-- language: python -->
-<!-- hash: sha256:a1b2c3... -->
+<!-- model: claude-opus-4-6 -->
 <!-- status: validated -->
 <!-- validated: 2026-03-14T12:00:00Z -->
 <!-- regeneration_count: 5 -->
@@ -487,7 +487,7 @@ The `.engspec` would be:
 <!-- engspec v1 -->
 <!-- source: game.py -->
 <!-- language: python -->
-<!-- hash: sha256:d4e5f6... -->
+<!-- model: claude-opus-4-6 -->
 <!-- status: validated -->
 <!-- validated: 2026-03-14T14:00:00Z -->
 <!-- regeneration_count: 7 -->

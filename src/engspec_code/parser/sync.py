@@ -7,7 +7,6 @@ LICENSE file in the root directory of this source tree.
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -43,19 +42,6 @@ class SyncReport:
     stale_specs: list[str] = field(default_factory=list)
     covered_functions: list[str] = field(default_factory=list)
 
-
-def _compute_file_hash(path: Path) -> str:
-    """
-    Compute sha256 hash of a file.
-
-    Args:
-        path: Path to the file.
-
-    Returns:
-        Hash string in format "sha256:<hex>".
-    """
-    h = hashlib.sha256(path.read_bytes())
-    return f"sha256:{h.hexdigest()}"
 
 
 def sync_check(source_dir: str | Path, engspec_dir: str | Path) -> SyncReport:
@@ -101,10 +87,6 @@ def sync_check(source_dir: str | Path, engspec_dir: str | Path) -> SyncReport:
             report.uncovered_functions.append(rel_path)
         else:
             ef = engspec_files[rel_path]
-            current_hash = _compute_file_hash(src_path)
-            if ef.source_hash and ef.source_hash != current_hash:
-                report.stale_specs.append(rel_path)
-            else:
-                report.covered_functions.append(rel_path)
+            report.covered_functions.append(rel_path)
 
     return report
