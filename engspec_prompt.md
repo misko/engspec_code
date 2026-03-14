@@ -120,6 +120,8 @@ Every `.engspec` file MUST follow this structure. Copy it, fill in the `{placeho
 
 ### Purpose
 {1-3 sentences. What and why, not how.}
+{If implementing one standard among common alternatives, state which}
+{it follows AND which it does NOT. Negative boundaries matter.}
 
 ### Context
 - Called by: {caller1(), caller2()}
@@ -143,6 +145,8 @@ Every `.engspec` file MUST follow this structure. Copy it, fill in the `{placeho
 {- When correctness depends on an exact literal value (regex, format string,}
 {  query template, protocol sequence), embed it in a fenced code block.}
 {  Do not paraphrase — the code block IS the spec for that value.}
+{- For third-party API calls where kwargs affect behavior, specify the exact}
+{  call signature: "calls idna.encode(host) (without uts46=True)"}
 
 ### Failure Modes
 {- Concrete: "Raises ValueError if n < 0", not "may raise errors"}
@@ -212,12 +216,12 @@ If a function's behavior is fully captured by its signature, Purpose alone is en
 
 | Section | Key rule |
 |---------|----------|
-| Purpose | 1-3 sentences. What and why, not how. |
+| Purpose | 1-3 sentences. What and why, not how. When the function implements one standard/specification out of multiple common alternatives, state which it follows AND which it does not. "Follows RFC 3986" is incomplete without "does NOT implement WHATWG special-scheme behaviors" when both are common choices. Negative boundaries prevent the regenerator from adding behaviors the original deliberately excludes. |
 | Context | Callers, callees, test coverage status. |
 | Preconditions | Every input constraint. If a function silently accepts invalid input, note what happens. |
 | Postconditions | Every output guarantee. Include mutation guarantees ("input list is not modified"). |
 | Invariants | What doesn't change. Important for stateful objects. |
-| Implementation Notes | Only what affects correctness. Algorithm choice, not code style. SHORTER than source. When correctness depends on an exact literal value (regex pattern, format string, query template, protocol sequence, magic constant), embed it in a fenced code block — do not paraphrase. |
+| Implementation Notes | Only what affects correctness. Algorithm choice, not code style. SHORTER than source. When correctness depends on an exact literal value (regex pattern, format string, query template, protocol sequence, magic constant), embed it in a fenced code block — do not paraphrase. When calling third-party APIs where keyword arguments affect behavior, specify the exact call signature — e.g., "`idna.encode(host)` (without `uts46=True`)" — since different kwargs produce different results. |
 | Failure Modes | Concrete exceptions and conditions. Not "may raise errors". Always specify the **exact error type** — not a parent type ("catches BaseException" and "catches OSError" have different behavior). For each error, specify whether it is **recovered** (caught, fallback applied, execution continues) or **propagated** (re-raised to caller). |
 | Test Strategy | Actionable. Someone writes tests from this section alone. |
 
@@ -232,9 +236,9 @@ Test files get `.engspec` specs just like source files. They use the same templa
 | Purpose | What property or behavior this test verifies. |
 | Context | What source functions/modules this test covers. Link to their `.engspec` files. "Tests: dotenv.main.set_key()", "Tests: dotenv.parser.parse_binding()". |
 | Preconditions | Test fixtures required, conftest setup, environment needs (tmp dirs, mock patches, env vars). |
-| Postconditions | What the test asserts — the properties being verified. "Asserts that return value is (True, key, value)", "Asserts file contains KEY=value on its own line". |
+| Postconditions | What the test asserts, using the **exact assertion expression**. Not "asserts headers equal X" but "asserts `headers == {"Host": "example.com"}` (case-insensitive Headers comparison)." The comparison method matters — `obj == expected` vs `convert(obj) == expected` can produce different results. Include exact expected values. |
 | Invariants | What is cleaned up / restored after the test (tmp files deleted, env vars reset, etc.). |
-| Implementation Notes | Testing patterns: parametrize values, fixture chains, framework-specific runner usage. **For test doubles (mocks, stubs, patches, fakes):** specify the exact target being replaced (full qualified path), what it's replaced with, and any framework-specific arguments that affect behavior. A wrong target path means the real code runs instead of the double. These must be reproduced exactly. |
+| Implementation Notes | Testing patterns: parametrize values, fixture chains, framework-specific runner usage. **For test doubles (mocks, stubs, patches, fakes):** specify the exact target being replaced (full qualified path), what it's replaced with, and any framework-specific arguments that affect behavior. A wrong target path means the real code runs instead of the double. **For fixture data files** (JSON, CSV, YAML test data): specify the exact field/key used to access test input — e.g., "reads `test_case["href"]` (pre-resolved URL), NOT `test_case["input"]`." **For object lifecycle:** note whether objects are used with a context manager, async context manager, or plain construction — e.g., "creates client via `client = Client()` (no context manager)" vs "creates client via `async with AsyncClient() as client:`." |
 | Failure Modes | Omit — tests don't have failure modes (they either pass or fail). |
 | Test Strategy | Omit — tests don't need a test strategy for themselves. |
 
