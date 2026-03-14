@@ -140,12 +140,17 @@ Every `.engspec` file MUST follow this structure. Copy it, fill in the `{placeho
 
 ### Implementation Notes
 {- Only what affects correctness. MUST be shorter than the source code.}
+{- When correctness depends on an exact literal value (regex, format string,}
+{  query template, protocol sequence), embed it in a fenced code block.}
+{  Do not paraphrase — the code block IS the spec for that value.}
 
 ### Failure Modes
 {- Concrete: "Raises ValueError if n < 0", not "may raise errors"}
+{- Always specify the EXACT error type — not a parent type.}
+{  "catches BaseException" and "catches OSError" have different behavior.}
 {- For each error, state: **recovered** (caught, fallback, continues) or **propagated** (re-raised to caller)}
-{- Example: "If X fails: **recovered** — sets fallback_value, continues"}
-{- Example: "If Y fails: **propagated** — closes handle, re-raises to caller"}
+{- Example: "If X raises FileNotFoundError: **recovered** — sets fallback_value, continues"}
+{- Example: "If Y raises PermissionError: **propagated** — closes handle, re-raises to caller"}
 
 ### Test Strategy
 {- Actionable bullets. Someone should be able to write tests from this alone.}
@@ -159,10 +164,20 @@ Every `.engspec` file MUST follow this structure. Copy it, fill in the `{placeho
 
 **Every section uses exactly these heading names, in this order.** If a section doesn't apply to a particular function (e.g., a pure function has no Failure Modes), omit the section entirely — don't include it with "N/A" or empty content.
 
-**The `##` heading MUST be the function signature in backticks.** For regular functions:
+**The `##` heading MUST be the exact signature in backticks.** The signature is a contract — it defines the API that callers depend on. Include all parameter defaults exactly as they appear in the source. If a parameter has no default, it must not have one in the heading. Do not invent defaults.
+
+For regular functions:
 ```
 ## `function_name(param1: Type, param2: Type) -> ReturnType`
 ```
+
+For types/classes, the heading includes the full type declaration — base types, interfaces, traits, and behavioral modifiers:
+```
+## `class Atom(metaclass=ABCMeta)`
+## `struct Point: Hash + Display`
+## `class Config extends BaseConfig implements Serializable`
+```
+Methods within the type use the standard function heading. Abstract/virtual/interface methods that must be implemented by subtypes should state this in Purpose: "Abstract — must be implemented by subtypes."
 
 **For file-level code** (top-level execution, mutable globals, interrelated constants), use the same template with a pseudo-function signature:
 ```
@@ -187,8 +202,9 @@ For languages where everything is a function (Rust, Go, Java), `<file-level>` is
 
 **What to skip entirely:**
 - Trivial getters/setters (unless they have validation logic)
-- `__repr__`, `__str__` (unless complex formatting)
 - Auto-generated code (unless the generation has important constraints)
+
+**Do NOT skip** methods that affect equality, hashing, ordering, comparison, or string representation — even if they look trivial. These determine how objects behave in collections, comparisons, and debugging output. Omitting them changes observable behavior.
 
 If a function's behavior is fully captured by its signature, Purpose alone is enough — omit other sections.
 
@@ -201,8 +217,8 @@ If a function's behavior is fully captured by its signature, Purpose alone is en
 | Preconditions | Every input constraint. If a function silently accepts invalid input, note what happens. |
 | Postconditions | Every output guarantee. Include mutation guarantees ("input list is not modified"). |
 | Invariants | What doesn't change. Important for stateful objects. |
-| Implementation Notes | Only what affects correctness. Algorithm choice, not code style. SHORTER than source. |
-| Failure Modes | Concrete exceptions and conditions. Not "may raise errors". For each error, specify whether it is **recovered** (caught, fallback applied, execution continues) or **propagated** (re-raised to caller). Example: "If lstat raises FileNotFoundError: **recovered** — sets original_mode to None and continues without mode preservation." vs "If lstat raises PermissionError: **propagated** — closes file handle, then re-raises to caller." |
+| Implementation Notes | Only what affects correctness. Algorithm choice, not code style. SHORTER than source. When correctness depends on an exact literal value (regex pattern, format string, query template, protocol sequence, magic constant), embed it in a fenced code block — do not paraphrase. |
+| Failure Modes | Concrete exceptions and conditions. Not "may raise errors". Always specify the **exact error type** — not a parent type ("catches BaseException" and "catches OSError" have different behavior). For each error, specify whether it is **recovered** (caught, fallback applied, execution continues) or **propagated** (re-raised to caller). |
 | Test Strategy | Actionable. Someone writes tests from this section alone. |
 
 ### Test files
@@ -218,7 +234,7 @@ Test files get `.engspec` specs just like source files. They use the same templa
 | Preconditions | Test fixtures required, conftest setup, environment needs (tmp dirs, mock patches, env vars). |
 | Postconditions | What the test asserts — the properties being verified. "Asserts that return value is (True, key, value)", "Asserts file contains KEY=value on its own line". |
 | Invariants | What is cleaned up / restored after the test (tmp files deleted, env vars reset, etc.). |
-| Implementation Notes | Testing patterns: parametrize values, mock targets and return values, fixture chains, click.testing.CliRunner usage. |
+| Implementation Notes | Testing patterns: parametrize values, fixture chains, framework-specific runner usage. **For test doubles (mocks, stubs, patches, fakes):** specify the exact target being replaced (full qualified path), what it's replaced with, and any framework-specific arguments that affect behavior. A wrong target path means the real code runs instead of the double. These must be reproduced exactly. |
 | Failure Modes | Omit — tests don't have failure modes (they either pass or fail). |
 | Test Strategy | Omit — tests don't need a test strategy for themselves. |
 
