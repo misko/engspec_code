@@ -67,19 +67,16 @@ def test_parse_context():
     assert compute_spec.context.test_coverage == "not yet tested"
 
 
-def test_parse_debate_log():
+def test_parse_no_debate_log():
     """
-    Test parsing the Debate Log table.
+    Test that specs without a Debate Log section parse correctly.
+
+    Debate Log is added by engspec_tester, not during code→engspec.
     """
     ef = EngspecFile.parse(FIXTURES_DIR / "sample.engspec")
 
-    divide_spec = ef.specs["divide"]
-    assert len(divide_spec.debate_log) == 1
-    entry = divide_spec.debate_log[0]
-    assert entry.round == 1
-    assert entry.agent == "spec_filler"
-    assert "inf" in entry.finding.lower()
-    assert entry.ruling == "accepted"
+    for spec in ef.specs.values():
+        assert len(spec.debate_log) == 0
 
 
 def test_serialize_roundtrip():

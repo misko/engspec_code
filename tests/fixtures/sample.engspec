@@ -38,10 +38,6 @@ Add two integers and return the result.
 - Edge case: add(0, 0) == 0
 - Edge case: negative numbers
 
-### Debate Log
-| Round | Agent | Finding | Ruling | Action |
-|-------|-------|---------|--------|--------|
-
 ---
 
 ## `divide(a: float, b: float) -> float`
@@ -70,18 +66,13 @@ Divide a by b, raising ValueError if b is zero.
 - Uses Python's true division (/)
 
 ### Failure Modes
-- Raises ValueError when b == 0
+- Raises ValueError when b == 0: **propagated** to caller
 - May return inf for very large a / very small b
 
 ### Test Strategy
 - Property: divide(a, b) * b ~= a for b != 0
 - Edge case: divide(0, 1) == 0
 - Edge case: divide(1, 0) raises ValueError
-
-### Debate Log
-| Round | Agent | Finding | Ruling | Action |
-|-------|-------|---------|--------|--------|
-| 1 | spec_filler | Missing inf handling | accepted | Added inf note to failure modes |
 
 ---
 
@@ -112,16 +103,12 @@ Compute an arithmetic operation and record the result in history.
 - Dispatches to built-in addition or divide() based on op string
 
 ### Failure Modes
-- Raises ValueError for unknown op
-- Raises ValueError (from divide) when op="div" and b=0
+- Raises ValueError for unknown op: **propagated** to caller
+- Raises ValueError (from divide) when op="div" and b=0: **propagated** from divide()
 
 ### Test Strategy
 - Property: after compute, history[-1] == returned value
 - Edge case: unknown operation raises ValueError
 - Integration: compute("div", 1, 0) propagates ValueError from divide()
-
-### Debate Log
-| Round | Agent | Finding | Ruling | Action |
-|-------|-------|---------|--------|--------|
 
 ---

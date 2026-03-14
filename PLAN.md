@@ -172,10 +172,6 @@ Runs the SO(3)-equivariant message passing backbone on atomic graph data.
 ### Test Strategy
 <!-- TO BE FILLED BY AGENT -->
 
-### Debate Log
-| Round | Agent | Finding | Ruling | Action |
-|-------|-------|---------|--------|--------|
-
 ---
 ```
 
@@ -240,10 +236,6 @@ producing per-node feature embeddings for downstream property heads.
 - Property: equivariance — rotate input, compare with rotated output
 - Edge case: single atom (no edges)
 - Edge case: self-loops in edge_index
-
-### Debate Log
-| Round | Agent | Finding | Ruling | Action |
-|-------|-------|---------|--------|--------|
 
 ---
 ```

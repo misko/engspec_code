@@ -153,7 +153,7 @@ Every `.engspec` file MUST follow this structure. Copy it, fill in the `{placeho
 ---
 ````
 
-**Note:** A `### Debate Log` section may appear in `.engspec` files after adversarial review by `engspec_tester`. Do NOT add it during `code→engspec` generation — it is added later by the tester's Red/Blue/Judge debate cycle.
+**Do NOT add a Debate Log section.** That is added later by `engspec_tester`, not during `code→engspec` generation.
 
 ### Rules for using the template
 
