@@ -1,0 +1,127 @@
+<!-- engspec v1 -->
+<!-- source: tests/fixtures/sample.py -->
+<!-- language: python -->
+<!-- hash: sha256:abc123 -->
+<!-- status: validated -->
+<!-- validated: 2026-03-14T10:30:00Z -->
+<!-- regeneration_count: 5 -->
+<!-- regeneration_pass_rate: 5/5 -->
+
+## `add(a: int, b: int) -> int`
+
+### Purpose
+Add two integers and return the result.
+
+### Context
+- Called by: Calculator.compute()
+- Calls:
+- Test coverage: tested in test_sample.py (basic addition)
+
+### Preconditions
+- a and b are integers
+
+### Postconditions
+- Returns a + b
+- No side effects
+
+### Invariants
+- Pure function, deterministic
+
+### Implementation Notes
+- Uses Python's built-in integer addition
+
+### Failure Modes
+- OverflowError not possible (Python ints are arbitrary precision)
+
+### Test Strategy
+- Property: add(a, b) == a + b for random a, b
+- Edge case: add(0, 0) == 0
+- Edge case: negative numbers
+
+### Debate Log
+| Round | Agent | Finding | Ruling | Action |
+|-------|-------|---------|--------|--------|
+
+---
+
+## `divide(a: float, b: float) -> float`
+
+### Purpose
+Divide a by b, raising ValueError if b is zero.
+
+### Context
+- Called by: Calculator.compute()
+- Calls:
+- Test coverage: tested in test_sample.py (basic division, zero check)
+
+### Preconditions
+- a and b are floats (or int-compatible)
+- b != 0 (otherwise raises ValueError)
+
+### Postconditions
+- Returns a / b
+- No side effects
+
+### Invariants
+- Pure function, deterministic
+
+### Implementation Notes
+- Checks b == 0 before dividing
+- Uses Python's true division (/)
+
+### Failure Modes
+- Raises ValueError when b == 0
+- May return inf for very large a / very small b
+
+### Test Strategy
+- Property: divide(a, b) * b ~= a for b != 0
+- Edge case: divide(0, 1) == 0
+- Edge case: divide(1, 0) raises ValueError
+
+### Debate Log
+| Round | Agent | Finding | Ruling | Action |
+|-------|-------|---------|--------|--------|
+| 1 | spec_filler | Missing inf handling | accepted | Added inf note to failure modes |
+
+---
+
+## `Calculator.compute(self, op: str, a: float, b: float) -> float`
+
+### Purpose
+Compute an arithmetic operation and record the result in history.
+
+### Context
+- Called by:
+- Calls: divide()
+- Test coverage: not yet tested
+
+### Preconditions
+- op is one of "add", "div"
+- a and b are numeric
+- For op="div", b != 0
+
+### Postconditions
+- Returns the computed result
+- Result is appended to self.history
+
+### Invariants
+- len(self.history) increases by 1 on success
+- self.history contains all past results in order
+
+### Implementation Notes
+- Dispatches to built-in addition or divide() based on op string
+
+### Failure Modes
+- Raises ValueError for unknown op
+- Raises ValueError (from divide) when op="div" and b=0
+
+### Test Strategy
+- Property: after compute, history[-1] == returned value
+- Edge case: unknown operation raises ValueError
+- Integration: compute("div", 1, 0) propagates ValueError from divide()
+
+### Debate Log
+| Round | Agent | Finding | Ruling | Action |
+|-------|-------|---------|--------|--------|
+
+---

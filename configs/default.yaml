@@ -1,0 +1,14 @@
+agent:
+  model: "claude-sonnet-4-20250514"
+  max_tokens: 8192
+  temperature: 0.0
+  regen_count: 5
+  max_iterations: 5
+
+swarm:
+  parallelism: 10
+  timeout_seconds: 600
+
+engspec_dir: ".engspec"
+input_file: "input.md"
+processed_file: "input_processed.md"
