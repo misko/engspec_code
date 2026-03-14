@@ -123,11 +123,18 @@ This is critical — installed dependencies are available for introspection duri
 
 From the call graph and manifest, sort files into regeneration order:
 
+**Source files** (by dependency):
 1. **Leaf files** — files whose functions don't call functions in other project files (utilities, constants, data models)
 2. **Interior files** — files that depend only on already-regenerated files
 3. **Root files** — entry points, main scripts, orchestrators
 
 If there are circular dependencies, group the cycle and regenerate those files together.
+
+**Test files** (after ALL source files):
+1. **conftest.py** / shared fixtures first — other test files depend on these
+2. **Test files** in any order — they depend on source code + fixtures but not on each other
+
+Test files have `"type": "test"` in the manifest. Always regenerate all source files before any test files, since tests import and exercise the source.
 
 ### Determine target language
 
@@ -233,6 +240,8 @@ If there are import errors or compilation failures, fix them. Common issues:
 
 ## Phase 5: Run Tests
 
+Test files were already regenerated from their `.engspec` specs in Phase 4 (after all source files). Do NOT clone or copy tests from the original repository — they must come from the specs.
+
 ### Step 1: Check for test information
 
 Look in `project_context.md` for:
@@ -244,14 +253,16 @@ Also check `test_coverage.md` for:
 - What functions are tested and how
 - Expected test behavior
 
-### Step 2: Generate tests if none exist
+### Step 2: Generate additional tests if needed
 
-If the project context says "no tests found" but the `.engspec` files have Test Strategy sections, generate tests from those sections:
+If no test `.engspec` files exist in the package but source `.engspec` files have Test Strategy sections, generate tests from those sections as a fallback:
 
 For each function with a Test Strategy:
 1. Create a test file mirroring the source structure
 2. Write one test per bullet point in Test Strategy
 3. Use the language's standard test framework
+
+This is a fallback only — normally test files have their own `.engspec` specs and are regenerated in Phase 4.
 
 ### Step 3: Run tests
 

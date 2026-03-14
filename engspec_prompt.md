@@ -205,6 +205,49 @@ If a function's behavior is fully captured by its signature, Purpose alone is en
 | Failure Modes | Concrete exceptions and conditions. Not "may raise errors". For each error, specify whether it is **recovered** (caught, fallback applied, execution continues) or **propagated** (re-raised to caller). Example: "If lstat raises FileNotFoundError: **recovered** — sets original_mode to None and continues without mode preservation." vs "If lstat raises PermissionError: **propagated** — closes file handle, then re-raises to caller." |
 | Test Strategy | Actionable. Someone writes tests from this section alone. |
 
+### Test files
+
+Test files get `.engspec` specs just like source files. They use the same template with these adjustments:
+
+**Use the same template exactly.** The `##` heading is the test function signature. The sections mean:
+
+| Section | Meaning for test functions |
+|---------|---------------------------|
+| Purpose | What property or behavior this test verifies. |
+| Context | What source functions/modules this test covers. Link to their `.engspec` files. "Tests: dotenv.main.set_key()", "Tests: dotenv.parser.parse_binding()". |
+| Preconditions | Test fixtures required, conftest setup, environment needs (tmp dirs, mock patches, env vars). |
+| Postconditions | What the test asserts — the properties being verified. "Asserts that return value is (True, key, value)", "Asserts file contains KEY=value on its own line". |
+| Invariants | What is cleaned up / restored after the test (tmp files deleted, env vars reset, etc.). |
+| Implementation Notes | Testing patterns: parametrize values, mock targets and return values, fixture chains, click.testing.CliRunner usage. |
+| Failure Modes | Omit — tests don't have failure modes (they either pass or fail). |
+| Test Strategy | Omit — tests don't need a test strategy for themselves. |
+
+**conftest.py files** get specs too. Fixtures are functions — each fixture gets a `##` section:
+
+```
+## `my_fixture(tmp_path) -> Path`
+
+### Purpose
+Creates a temporary .env file with KEY=value for testing.
+
+### Preconditions
+- tmp_path fixture is available (pytest built-in)
+
+### Postconditions
+- Returns Path to a file containing "KEY=value\n"
+- File exists on disk and is readable
+
+### Implementation Notes
+- Session-scoped — shared across all tests in the session
+```
+
+**`<file-level>` sections** for test files capture:
+- Module-level marks (`pytestmark = pytest.mark.usefixtures(...)`)
+- Shared test constants / test data
+- Parametrize data defined at module level
+
+**Regeneration verification** applies to test files too. A regenerated test file must assert the same properties as the original — same fixtures used, same assertions made, same parametrize values.
+
 ---
 
 ## Phase 4: Regeneration Verification
@@ -325,7 +368,8 @@ If you find real issues during self-review, fix them directly in the spec (updat
 
 Before delivering the `.engspec` file, verify:
 
-- [ ] Every public function/method has a section
+- [ ] Every public function/method in source files has a section
+- [ ] Every test file has a `.engspec` (including conftest.py)
 - [ ] File-level pseudo-functions exist for top-level execution, mutable globals, or interrelated constants (if applicable)
 - [ ] All metadata comments are present and accurate
 - [ ] Preconditions are specific (no vague "valid input")
@@ -542,7 +586,7 @@ After all `.engspec` files are validated, produce a standalone output package.
 
 Create a folder named `<project-name>-engspec/` containing:
 
-1. **All `.engspec` files** — mirroring the source directory structure
+1. **All `.engspec` files** — mirroring the source directory structure. This includes specs for both source files AND test files.
 2. **All non-code files from the repo** — copied verbatim, mirroring directory structure. These are files needed to regenerate a working project but that aren't source code:
    - Config files: `*.yaml`, `*.yml`, `*.toml`, `*.ini`, `*.cfg`, `*.conf`, `*.json`, `*.xml`
    - Documentation: `*.md`, `*.rst`, `*.txt` (README, CONTRIBUTING, CHANGELOG, etc.)
@@ -551,7 +595,7 @@ Create a folder named `<project-name>-engspec/` containing:
    - Project metadata: `pyproject.toml`, `Cargo.toml`, `package.json`, `go.mod`, `go.sum`
    - Requirements/lockfiles: `requirements.txt`, `Cargo.lock`, `package-lock.json`, `poetry.lock`
    - Static assets: images, fonts, sounds, data files used by the project
-   - Test fixtures and test data files (but NOT test source code — that gets regenerated from Test Strategy sections)
+   - Test fixtures and test data files (non-code: `.json`, `.env`, `.txt` fixtures — NOT test source code)
    - `.gitignore`, `.editorconfig`, `LICENSE`
 3. **`project_context.md`** — the project context from Phase 1 (whether user-provided or auto-generated)
 4. **`call_graph.md`** — the call graph analysis from Phase 2
@@ -560,6 +604,7 @@ Create a folder named `<project-name>-engspec/` containing:
 
 **What NOT to include:**
 - Source code files (`.py`, `.rs`, `.go`, `.c`, `.cpp`, `.js`, `.ts`, `.java`, etc.) — these are represented by `.engspec` files
+- Test source code files — these are also represented by `.engspec` files and get regenerated
 - Build artifacts (`__pycache__/`, `target/`, `node_modules/`, `build/`, `dist/`)
 - `.git/` directory
 - IDE files (`.vscode/`, `.idea/`)
@@ -573,14 +618,16 @@ Create a folder named `<project-name>-engspec/` containing:
 ├── call_graph.md               # Phase 2 call graph
 ├── test_coverage.md            # Phase 2 test coverage analysis
 ├── manifest.json               # Index of all specs + non-code files
-├── specs/                      # .engspec files mirroring source tree
+├── specs/                      # .engspec files mirroring full source tree
 │   ├── src/
 │   │   ├── main.py.engspec
 │   │   ├── utils.py.engspec
 │   │   └── models/
 │   │       └── player.py.engspec
-│   └── lib/
-│       └── physics.py.engspec
+│   └── tests/                  # Test file specs
+│       ├── conftest.py.engspec
+│       ├── test_main.py.engspec
+│       └── test_utils.py.engspec
 └── non_code/                   # Non-code files copied verbatim
     ├── README.md
     ├── LICENSE
@@ -591,6 +638,9 @@ Create a folder named `<project-name>-engspec/` containing:
     │   └── settings.yaml
     ├── assets/
     │   └── sprite.png
+    ├── tests/
+    │   └── fixtures/
+    │       └── sample.env      # Test data files (non-code only)
     └── .github/
         └── workflows/
             └── ci.yml
@@ -608,12 +658,35 @@ Create a folder named `<project-name>-engspec/` containing:
     {
       "spec": "specs/src/main.py.engspec",
       "source": "src/main.py",
+      "type": "source",
       "language": "python",
       "status": "validated",
       "regeneration_count": 7,
       "regeneration_pass_rate": "5/5",
       "functions": 4,
       "file_level_sections": 2
+    },
+    {
+      "spec": "specs/tests/conftest.py.engspec",
+      "source": "tests/conftest.py",
+      "type": "test",
+      "language": "python",
+      "status": "validated",
+      "regeneration_count": 5,
+      "regeneration_pass_rate": "5/5",
+      "functions": 3,
+      "file_level_sections": 0
+    },
+    {
+      "spec": "specs/tests/test_main.py.engspec",
+      "source": "tests/test_main.py",
+      "type": "test",
+      "language": "python",
+      "status": "validated",
+      "regeneration_count": 6,
+      "regeneration_pass_rate": "5/5",
+      "functions": 12,
+      "file_level_sections": 1
     }
   ],
   "non_code_files": [
@@ -661,7 +734,9 @@ pong-python-engspec.zip
 ├── test_coverage.md
 ├── manifest.json
 ├── specs/
-│   └── pong.py.engspec
+│   ├── pong.py.engspec
+│   └── tests/
+│       └── test_pong.py.engspec
 └── non_code/
     ├── README.md
     ├── LICENSE
