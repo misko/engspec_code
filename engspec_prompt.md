@@ -236,7 +236,7 @@ Test files get `.engspec` specs just like source files. They use the same templa
 | Purpose | What property or behavior this test verifies. |
 | Context | What source functions/modules this test covers. Link to their `.engspec` files. "Tests: dotenv.main.set_key()", "Tests: dotenv.parser.parse_binding()". |
 | Preconditions | Test fixtures required, conftest setup, environment needs (tmp dirs, mock patches, env vars). |
-| Postconditions | What the test asserts, using the **exact assertion expression**. Not "asserts headers equal X" but "asserts `headers == {"Host": "example.com"}` (case-insensitive Headers comparison)." The comparison method matters — `obj == expected` vs `convert(obj) == expected` can produce different results. Include exact expected values. |
+| Postconditions | **EVERY assertion must be written as a code block.** Do not describe assertions in English — embed the actual assertion expression. The code block IS the spec. This is mandatory because English paraphrasing of binary data, encoded values, and computed results introduces errors. Example: don't write "asserts the base64 output matches expected" — write: ```assert header == b"Basic dXNlcm5hbWU6cGFzc3dvcmQ="``` The comparison method matters too — `obj == expected` vs `convert(obj) == expected` produce different results. For parametrized tests, include the full parameter table as a code block. |
 | Invariants | What is cleaned up / restored after the test (tmp files deleted, env vars reset, etc.). |
 | Implementation Notes | Testing patterns: parametrize values, fixture chains, framework-specific runner usage. **For test doubles (mocks, stubs, patches, fakes):** specify the exact target being replaced (full qualified path), what it's replaced with, and any framework-specific arguments that affect behavior. A wrong target path means the real code runs instead of the double. **For fixture data files** (JSON, CSV, YAML test data): specify the exact field/key used to access test input — e.g., "reads `test_case["href"]` (pre-resolved URL), NOT `test_case["input"]`." **For object lifecycle:** note whether objects are used with a context manager, async context manager, or plain construction — e.g., "creates client via `client = Client()` (no context manager)" vs "creates client via `async with AsyncClient() as client:`." |
 | Failure Modes | Omit — tests don't have failure modes (they either pass or fail). |
@@ -266,7 +266,7 @@ Creates a temporary .env file with KEY=value for testing.
 - Shared test constants / test data
 - Parametrize data defined at module level
 
-**Regeneration verification** applies to test files too. A regenerated test file must assert the same properties as the original — same fixtures used, same assertions made, same parametrize values.
+**Regeneration verification** applies to test files too. A regenerated test must reproduce every assertion code block from the Postconditions section **exactly** — same values, same comparison methods, same expected outputs. Do not recompute expected values; copy them from the spec. If the spec says `assert result == b"\xc5\xa9sername"`, the regenerated test must use that exact byte sequence. A regeneration that changes any assertion value is a FAIL.
 
 ---
 

@@ -235,6 +235,7 @@ If there are import errors or compilation failures, fix them. Common issues:
 - Follow the language's idiomatic conventions (PEP 8 for Python, rustfmt for Rust, etc.)
 - Add necessary imports that the spec implies but doesn't explicitly list (e.g., if Postconditions mention returning a `dict`, import `dict` if needed in the language)
 - If the spec is ambiguous about something, make the most natural choice and add a `# NOTE: spec ambiguous — chose X over Y` comment
+- **For test files:** assertion code blocks in the Postconditions section are exact — copy expected values verbatim. Do NOT recompute, re-derive, or re-encode expected values. If the spec says `assert x == b"\xc5\xa9"`, use that exact byte sequence.
 
 ---
 
