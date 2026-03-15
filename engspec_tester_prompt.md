@@ -67,27 +67,44 @@ For every `.engspec` file, build a map of:
 
 ### Step 3: Identify analysis targets
 
-Prioritize functions for debate:
+Analyze **both source specs and test specs**. The manifest marks each spec with `"type": "source"` or `"type": "test"` — you must debate both. Test specs are where most regeneration failures occur (wrong API usage, wrong fixture setup, wrong assertion logic), so do not skip them.
+
+**Source spec priorities:**
 1. **Weak test coverage** — functions where the Context or Test Strategy says "not tested" or has gaps
 2. **Complex call chains** — functions that call many others or are called by many (high composition risk)
 3. **Error handling** — functions with Failure Modes sections (recovered/propagated errors are common gap sources)
 4. **File-level pseudo-functions** — `<file-level>` sections that set up state used by many functions
 5. **Negative boundaries** — functions whose Purpose mentions what they do NOT implement (these are easy to under-specify)
 
-Skip trivial functions where the spec is clearly complete (simple getters, identity transforms).
+**Test spec priorities:**
+1. **Tests with complex setup** — tests with mocks, patches, fixture chains, or multi-step setup in Preconditions
+2. **Tests with computed expected values** — tests where Postconditions involve encoded data, transformed values, or derived results (these are prone to regeneration errors)
+3. **Tests covering error paths** — tests that verify Failure Modes are the most likely to have wrong setup
+4. **Parametrized tests** — tests with parameter tables where one wrong value breaks many cases
+5. **Integration tests** — tests that exercise multiple source functions together (composition bugs surface here)
+
+Skip trivial functions/tests where the spec is clearly complete (simple getters, identity transforms, trivial assertion-only tests).
 
 ---
 
 ## Phase 2: Batch into Subgraphs
 
-Group functions into related subgraphs of **at most 10 functions** each, using the call graph:
+Group functions into related subgraphs of **at most 10 functions** each.
 
+**Source spec subgraphs** — grouped by call graph:
 1. Start from each root function (entry point with no callers in the project)
 2. Walk the call graph to collect its callees up to depth 3
 3. If a subgraph exceeds 10, split at natural boundaries (module boundaries, separate concerns)
 4. Functions that appear in multiple subgraphs are debated in the subgraph where they are most central
 
-Each subgraph is debated independently. Subgraphs can be processed in parallel.
+**Test spec subgraphs** — grouped by what they test:
+1. Group tests by the source module they cover (from the Context section)
+2. Include the source specs they test in the same subgraph so Red can check composition between test setup and source preconditions
+3. conftest fixtures go in every subgraph that uses them
+
+Debate source subgraphs first, then test subgraphs. This way, source spec fixes from earlier rounds benefit the test spec debate.
+
+Each subgraph is debated independently. Subgraphs can be processed in parallel within their category.
 
 ---
 
