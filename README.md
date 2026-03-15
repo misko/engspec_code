@@ -158,6 +158,5 @@ engspec_code/
 ├── engspec_prompt.md              # code → engspec
 ├── engspec_to_code_prompt.md      # engspec → code
 ├── engspec_tester_prompt.md       # adversarial debate
-├── PLAN.md                        # Design document
 └── README.md
 ```
