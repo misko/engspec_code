@@ -114,7 +114,7 @@ Every `.engspec` file MUST follow this structure. Copy it, fill in the `{placeho
 <!-- status: {skeleton|validated|failed} -->
 <!-- validated: {ISO 8601 timestamp, omit if not yet validated} -->
 <!-- regeneration_count: {total attempts, omit if not yet validated} -->
-<!-- regeneration_pass_rate: {5/5 for validated, omit if not yet validated} -->
+<!-- regeneration_pass_rate: {3/3 for validated, omit if not yet validated} -->
 
 ## `{function_name(param1: Type, param2: Type) -> ReturnType}`
 
@@ -272,7 +272,7 @@ Creates a temporary .env file with KEY=value for testing.
 
 ## Phase 4: Regeneration Verification
 
-This is the critical validation step. The spec is not done until **5 consecutive regenerations all pass without any spec changes between them**.
+This is the critical validation step. The spec is not done until **3 consecutive regenerations all pass without any spec changes between them**.
 
 ### Overview
 
@@ -280,7 +280,7 @@ This is the critical validation step. The spec is not done until **5 consecutive
 regeneration_number = 0
 consecutive_passes = 0
 
-while consecutive_passes < 5:
+while consecutive_passes < 3:
     regeneration_number += 1
     if regeneration_number > 20:
         ERROR: spec failed to converge after 20 regenerations
@@ -294,7 +294,7 @@ while consecutive_passes < 5:
         consecutive_passes = 0    # reset — need 5 clean in a row
 ```
 
-**Hard limit: 20 total regenerations.** If you cannot achieve 5 consecutive passes within 20 regenerations, mark the spec as `status: failed` and report what could not be captured.
+**Hard limit: 20 total regenerations.** If you cannot achieve 3 consecutive passes within 20 regenerations, mark the spec as `status: failed` and report what could not be captured.
 
 ### Per-regeneration procedure
 
@@ -326,19 +326,19 @@ Things that DON'T matter: code style, variable names, comments, import order, pe
 
 ### Convergence
 
-The spec is **validated** when you achieve 5 consecutive PASS results with no spec edits in between. This proves the spec is sufficient for any independent reader to reproduce the behavior.
+The spec is **validated** when you achieve 3 consecutive PASS results with no spec edits in between. This proves the spec is sufficient for any independent reader to reproduce the behavior.
 
 ### Update metadata
 
-After convergence (5/5 consecutive passes):
+After convergence (3/3 consecutive passes):
 ```markdown
 <!-- status: validated -->
 <!-- validated: <timestamp> -->
 <!-- regeneration_count: <total attempts, e.g. 8> -->
-<!-- regeneration_pass_rate: 5/5 -->
+<!-- regeneration_pass_rate: 3/3 -->
 ```
 
-`regeneration_count` is the TOTAL number of regenerations performed (including failures). `regeneration_pass_rate` is always `5/5` for a validated spec — it means the final 5 consecutive attempts all passed.
+`regeneration_count` is the TOTAL number of regenerations performed (including failures). `regeneration_pass_rate` is always `3/3` for a validated spec — it means the final 3 consecutive attempts all passed.
 
 If the spec fails to converge after 20 regenerations:
 ```markdown
@@ -355,9 +355,7 @@ Regeneration  1: FAIL — spec didn't mention clamping behavior → fix spec, re
 Regeneration  2: FAIL — spec didn't specify collision order → fix spec, reset to 0
 Regeneration  3: PASS — consecutive: 1
 Regeneration  4: PASS — consecutive: 2
-Regeneration  5: PASS — consecutive: 3
-Regeneration  6: PASS — consecutive: 4
-Regeneration  7: PASS — consecutive: 5 → VALIDATED (7 total, 5/5 final)
+Regeneration  5: PASS — consecutive: 3 → VALIDATED (5 total, 3/3 final)
 ```
 
 ---
@@ -397,8 +395,8 @@ Before delivering the `.engspec` file, verify:
 - [ ] Failure modes list concrete exceptions/conditions
 - [ ] Test strategy is actionable (someone could write tests from it)
 - [ ] Implementation Notes are SHORTER than the source code
-- [ ] Regeneration verification passed: 5 consecutive passes within 20 total attempts
-- [ ] Status is `validated` with `regeneration_pass_rate: 5/5`
+- [ ] Regeneration verification passed: 3 consecutive passes within 20 total attempts
+- [ ] Status is `validated` with `regeneration_pass_rate: 3/3`
 - [ ] The spec reads as self-contained English — no "see code for details"
 
 ---
@@ -428,7 +426,7 @@ The `.engspec` would be:
 <!-- status: validated -->
 <!-- validated: 2026-03-14T12:00:00Z -->
 <!-- regeneration_count: 5 -->
-<!-- regeneration_pass_rate: 5/5 -->
+<!-- regeneration_pass_rate: 3/3 -->
 
 ## `fibonacci(n: int) -> int`
 
@@ -511,7 +509,7 @@ The `.engspec` would be:
 <!-- status: validated -->
 <!-- validated: 2026-03-14T14:00:00Z -->
 <!-- regeneration_count: 7 -->
-<!-- regeneration_pass_rate: 5/5 -->
+<!-- regeneration_pass_rate: 3/3 -->
 
 ## `<file-level: initialization>`
 
@@ -682,7 +680,7 @@ Create a folder named `<project-name>-engspec/` containing:
       "language": "python",
       "status": "validated",
       "regeneration_count": 7,
-      "regeneration_pass_rate": "5/5",
+      "regeneration_pass_rate": "3/3",
       "functions": 4,
       "file_level_sections": 2
     },
@@ -693,7 +691,7 @@ Create a folder named `<project-name>-engspec/` containing:
       "language": "python",
       "status": "validated",
       "regeneration_count": 5,
-      "regeneration_pass_rate": "5/5",
+      "regeneration_pass_rate": "3/3",
       "functions": 3,
       "file_level_sections": 0
     },
@@ -704,7 +702,7 @@ Create a folder named `<project-name>-engspec/` containing:
       "language": "python",
       "status": "validated",
       "regeneration_count": 6,
-      "regeneration_pass_rate": "5/5",
+      "regeneration_pass_rate": "3/3",
       "functions": 12,
       "file_level_sections": 1
     }

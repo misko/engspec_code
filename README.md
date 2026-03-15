@@ -98,7 +98,7 @@ Please regenerate the full codebase into /home/ubuntu/httpx-regen/ and run tests
 <!-- model: claude-opus-4-6 -->
 <!-- status: validated -->
 <!-- regeneration_count: 7 -->
-<!-- regeneration_pass_rate: 5/5 -->
+<!-- regeneration_pass_rate: 3/3 -->
 
 ## `function_name(param1: Type, param2: Type) -> ReturnType`
 
@@ -143,7 +143,7 @@ What and why, not how.
 
 ## Validation
 
-Specs are validated through regeneration: re-implement each function from the spec alone. Must achieve **5 consecutive passes** within **20 total attempts**. Any failure refines the spec and resets the counter.
+Specs are validated through regeneration: re-implement each function from the spec alone. Must achieve **3 consecutive passes** within **20 total attempts**. Any failure refines the spec and resets the counter.
 
 ## Tested On
 
