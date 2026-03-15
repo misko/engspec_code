@@ -1,6 +1,12 @@
-# engspec_code
+# engspec
 
-English-first specification layer for any codebase. Every function gets a parallel `.engspec` specification written in structured English, detailed enough that an AI agent can re-implement the function from the spec alone.
+English-first specification layer for any codebase.
+
+You don't need to read a fused Triton kernel to understand what a neural network layer does. You need to know: what tensors go in, what tensors come out, what mathematical operation is performed, what numerical properties are preserved, and how it's tested. The implementation details — block sizes, memory layouts, warp-level optimizations — matter for performance, but the specification is what tells you whether the code is *correct*.
+
+engspec captures this as structured English. Every function gets a specification covering its contract (preconditions, postconditions, invariants), its failure modes, and its test strategy. The spec is shorter than the code, readable by anyone, and precise enough to regenerate a working implementation from scratch.
+
+Convert any codebase to `.engspec` files. Let adversarial AI agents debate every edge case, error path, and parameter contract. Give high-level guidance in plain English — "this implements SO(3)-equivariant message passing, not SE(3)" — and the agents handle implementation, testing, and validation. You steer at the level of mathematical intent; they work out the details.
 
 No installation required. Three self-contained markdown prompts — give them to Claude and go.
 
@@ -16,7 +22,7 @@ engspec_to_code_prompt.md  →  engspec → code (regenerates codebase from spec
 
 ### 1. `engspec_prompt.md` — Code → Engspec
 
-Analyzes a codebase and produces validated `.engspec` files for every source and test file. Validates each spec by reimplementing from spec alone 5 times.
+Analyzes a codebase and produces validated `.engspec` files for every source and test file. Validates each spec by reimplementing from spec alone 3 times.
 
 **Example — from a git URL:**
 
