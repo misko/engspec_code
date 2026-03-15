@@ -2,54 +2,94 @@
 
 English-first specification layer for any codebase. Every function gets a parallel `.engspec` specification written in structured English, detailed enough that an AI agent can re-implement the function from the spec alone.
 
-## What This Does
+No installation required. Three self-contained markdown prompts — give them to Claude and go.
 
-`engspec_code` provides three standalone prompts that form a complete pipeline:
+## The Pipeline
 
 ```
 engspec_prompt.md          →  code → engspec (produces project-engspec.zip)
-engspec_tester_prompt.md   →  adversarial debate (produces project-engspec-tested.zip)
+engspec_tester_prompt.md   →  adversarial debate (strengthens specs)
 engspec_to_code_prompt.md  →  engspec → code (regenerates codebase from specs)
 ```
 
-No installation required. Each prompt is a self-contained markdown file you give to Claude.
+## Prompts
 
-## Quick Start
+### 1. `engspec_prompt.md` — Code → Engspec
 
-### 1. Generate specs from a repo
+Analyzes a codebase and produces validated `.engspec` files for every source and test file. Validates each spec by reimplementing from spec alone 5 times.
+
+**Example — from a git URL:**
 
 ```
-Read /path/to/engspec_code/engspec_prompt.md for your instructions.
+Read /path/to/engspec_prompt.md for your instructions.
 
 Please clone https://github.com/encode/httpx, analyze the repo, and produce validated .engspec files for all source files.
 
 No input.md is provided — auto-generate the project context from the repo.
 ```
 
-### 2. Run adversarial analysis (optional)
+**Example — from a local repo:**
 
 ```
-Read /path/to/engspec_code/engspec_tester_prompt.md for your instructions.
+Read /path/to/engspec_prompt.md for your instructions.
 
-Here is the engspec package at: /path/to/httpx-engspec
-Here is the source repo at: /path/to/httpx
+Here is my repo at /home/ubuntu/my-project
+
+Please produce validated .engspec files for all source files.
+```
+
+**Output:** `project-engspec.zip` containing `.engspec` files, project context, call graph, test coverage analysis, non-code files (configs, docs, assets), and a manifest.
+
+---
+
+### 2. `engspec_tester_prompt.md` — Adversarial Debate
+
+Runs Red/Blue/Judge debate on `.engspec` files to find spec gaps, ambiguities, and contradictions. The Judge never sees source code — if the spec is too ambiguous to rule on, that's a finding.
+
+**Example — spec + source (recommended):**
+
+```
+Read /path/to/engspec_tester_prompt.md for your instructions.
+
+Here is the engspec package at: /home/ubuntu/httpx-engspec
+Here is the source repo at: /home/ubuntu/httpx
 
 Please run adversarial analysis.
 ```
 
-### 3. Regenerate code from specs
+**Example — spec only:**
 
 ```
-Read /path/to/engspec_code/engspec_to_code_prompt.md for your instructions.
+Read /path/to/engspec_tester_prompt.md for your instructions.
 
-Here is the engspec package: /path/to/httpx-engspec.zip
+Here is the engspec package at: /home/ubuntu/httpx-engspec
+
+Please run adversarial analysis.
+```
+
+**Output:** Updated `.engspec` files with Debate Log entries and fixes, analysis report with findings and confidence scores.
+
+---
+
+### 3. `engspec_to_code_prompt.md` — Engspec → Code
+
+Regenerates a full working codebase from an `.engspec` package. Installs dependencies first (so third-party APIs can be introspected), regenerates in dependency order, then runs tests.
+
+**Example:**
+
+```
+Read /path/to/engspec_to_code_prompt.md for your instructions.
+
+Here is the engspec package: /home/ubuntu/httpx-engspec.zip
 
 Please regenerate the full codebase into /home/ubuntu/httpx-regen/ and run tests.
 ```
 
-## The .engspec Format
+**Output:** Complete working codebase + test results + validation report listing any spec gaps found during regeneration.
 
-Every `.engspec` file mirrors a source file with structured sections per function:
+---
+
+## The .engspec Format
 
 ```markdown
 <!-- engspec v1 -->
@@ -91,59 +131,33 @@ What and why, not how.
 - Edge: empty input returns empty output
 ```
 
-### Key format features
+### Key features
 
-- **File-level pseudo-functions**: `<file-level: initialization>`, `<file-level: state>` for non-function code
-- **Type declarations**: `class Atom(metaclass=ABCMeta)` with full inheritance/interface info
-- **Exact literals**: regex patterns, format strings, byte sequences in fenced code blocks
-- **Error semantics**: every error labeled **recovered** or **propagated**
-- **Test specs**: test files get `.engspec` too, with assertion code blocks in Postconditions
+- **Language-agnostic** — works with any codebase (tested on Python repos)
+- **File-level pseudo-functions** — `<file-level: initialization>`, `<file-level: state>` for non-function code
+- **Type declarations** — `class Atom(metaclass=ABCMeta)` with full inheritance info
+- **Exact literals** — regex patterns, byte sequences in fenced code blocks (never paraphrased)
+- **Error semantics** — every error labeled **recovered** or **propagated** with exact error type
+- **Test specs** — test files get `.engspec` too, with assertion code blocks in Postconditions
+- **Negative boundaries** — what the function does NOT implement is as important as what it does
 
 ## Validation
 
-Specs are validated through regeneration: re-implement each function from the spec alone 5 times. If all 5 consecutive regenerations produce functionally equivalent code, the spec is validated. Hard cap of 20 total attempts.
+Specs are validated through regeneration: re-implement each function from the spec alone. Must achieve **5 consecutive passes** within **20 total attempts**. Any failure refines the spec and resets the counter.
 
-## Output Package
+## Tested On
 
-The code→engspec pipeline produces a zip containing:
+- [python-dotenv](https://github.com/theskumar/python-dotenv)
+- [httpx](https://github.com/encode/httpx)
+- [requests](https://github.com/psf/requests)
 
-```
-project-engspec/
-├── project_context.md      # Project description, test setup, etc.
-├── call_graph.md            # Function call relationships
-├── test_coverage.md         # What's tested, what's not
-├── manifest.json            # Index of all specs + non-code files
-├── specs/                   # .engspec files mirroring source tree
-│   ├── src/
-│   │   └── main.py.engspec
-│   └── tests/
-│       └── test_main.py.engspec
-└── non_code/                # Config, docs, assets (verbatim copies)
-    ├── pyproject.toml
-    ├── README.md
-    └── ...
-```
-
-## Language Support
-
-Works with any language. The `.engspec` format is English, not tied to any language. Tested with Python repos (python-dotenv, httpx, requests).
-
-## Project Structure
+## Repository Contents
 
 ```
 engspec_code/
-├── engspec_prompt.md              # code → engspec prompt
-├── engspec_to_code_prompt.md      # engspec → code prompt
-├── engspec_tester_prompt.md       # adversarial debate prompt
-├── PLAN.md                        # Detailed design document
-├── src/engspec_code/              # Python library (parser, call graph, etc.)
-├── tests/                         # Test suite (28 tests)
-└── configs/                       # Default configuration
-```
-
-## Development
-
-```bash
-pip install -e ".[dev]"
-pytest tests/
+├── engspec_prompt.md              # code → engspec
+├── engspec_to_code_prompt.md      # engspec → code
+├── engspec_tester_prompt.md       # adversarial debate
+├── PLAN.md                        # Design document
+└── README.md
 ```
