@@ -1,8 +1,6 @@
-# engspec: Code → English Specification (Single-File Prompt)
+# engspec: Code → English Specification
 
 Use this document as instructions to produce a validated `.engspec` specification for any source file. Works with any language.
-
-**CRITICAL — Model requirement:** You MUST use `model: "opus"` for ALL agents, sub-agents, and tool calls that spawn agents — including Explore, Plan, general-purpose, and any other agent type. No exceptions. Do not use Sonnet or Haiku for any agent in this workflow. When calling the Agent tool, always pass `model: "opus"`. This applies to every agent invocation for the entire duration of this task.
 
 ---
 
@@ -34,14 +32,41 @@ Here is my prompt: engspec_prompt.md
 Please clone <git-url>, analyze the repo, and produce .engspec files for all source files.
 ```
 
+### Option D: You want to spec a subset of files
+
+```
+Here is my prompt: engspec_prompt.md
+Here is my repo at /path/to/repo
+Please produce .engspec files for only: src/parser.py, src/lexer.py
+```
+
+### Option E: You want to update existing specs (incremental)
+
+```
+Here is my prompt: engspec_prompt.md
+Here is my repo at /path/to/repo
+Here is the existing engspec package at: /path/to/project-engspec/
+Please update specs for files that have changed since the last generation.
+```
+
 When no `input.md` or project context is provided, **you must auto-generate it**.
 See Phase 1 below.
 
 ---
 
-## Phase 1: Project Context
+## Phase 1: Project Context and Scope
 
-Before analyzing code, establish context. Use whichever source is available, in priority order:
+Before analyzing code, establish context and determine scope.
+
+### Determine scope
+
+- **Full** (default): spec all source files in the repo
+- **Partial** (Option D): spec only the files/modules/directories the user specified. Tag functions outside the spec boundary as `[external]` in Context sections.
+- **Incremental** (Option E): load the existing engspec package, compare each spec's `source_commit` against `git log -1 --format=%H -- <file>` for the current source. Re-analyze only stale files (source changed since spec was written). Also scan the source repo for files that have no corresponding spec in the existing package — generate new specs for these. Preserve unchanged specs and their checksums.
+
+### Establish context
+
+Use whichever source is available, in priority order:
 
 ### If the user provided an `input.md`:
 Read it and proceed to Phase 2.
@@ -80,19 +105,23 @@ Infer what you can from the code itself. Note gaps ("no test information availab
 
 ## Phase 2: Deep Analysis
 
-For the source file(s), analyze and produce (share with the user):
+For the source file(s) in scope, analyze and produce (share with the user):
 
 ### Call Graph
 Trace the major call paths as trees:
 ```
 function_a()
   → function_b()
-    → function_c()
+    → function_c() [external]
   → function_d()
 ```
 
+For partial packages, mark callees outside the spec boundary as `[external]`. Record these in `external_references` in the manifest.
+
+For incremental updates, regenerate the **full** call graph and test coverage (not just for changed files) — read all existing specs in the package plus the newly changed specs to build a complete picture. Call edges and test coverage may have shifted even for unchanged files.
+
 ### Test Coverage
-For each function, note:
+For each function in scope, note:
 - What tests exist (file, what they check)
 - What is NOT tested (gaps)
 
@@ -100,179 +129,45 @@ For each function, note:
 
 ## Phase 3: Generate .engspec
 
-Produce one `.engspec` file per source file. **Copy the template below exactly. Fill in the placeholders. Do not invent your own format, reorder sections, rename headings, or add custom structure.**
+Read `engspec_format.md` for the complete `.engspec` template, section rules, test file conventions, and versioning metadata. Follow it exactly.
 
-### THE TEMPLATE
-
-Every `.engspec` file MUST follow this structure. Copy it, fill in the `{placeholders}`, remove sections that don't apply, but never rename or reorder anything.
-
-````markdown
-<!-- engspec v1 -->
-<!-- source: {relative/path/to/source.ext} -->
-<!-- language: {python|rust|go|cpp|c|javascript|typescript|java} -->
-<!-- model: {model used to generate this spec, e.g. claude-opus-4-6} -->
-<!-- status: {skeleton|validated|failed} -->
-<!-- validated: {ISO 8601 timestamp, omit if not yet validated} -->
-<!-- regeneration_count: {total attempts, omit if not yet validated} -->
-<!-- regeneration_pass_rate: {3/3 for validated, omit if not yet validated} -->
-
-## `{function_name(param1: Type, param2: Type) -> ReturnType}`
-
-### Purpose
-{1-3 sentences. What and why, not how.}
-{If implementing one standard among common alternatives, state which}
-{it follows AND which it does NOT. Negative boundaries matter.}
-
-### Context
-- Called by: {caller1(), caller2()}
-- Calls: {callee1(), callee2()}
-- Test coverage: {what's tested, what's not}
-
-### Preconditions
-{- Each precondition on its own bullet}
-{- Be specific: "n >= 1" not "valid input"}
-{- Include constants this function depends on: "TICK_RATE controls frame cap, currently 60"}
-
-### Postconditions
-{- Each guarantee on its own bullet}
-{- Include return value, side effects, and what is NOT modified}
-
-### Invariants
-{- Properties preserved before and after the call}
-
-### Implementation Notes
-{- Only what affects correctness. MUST be shorter than the source code.}
-{- When correctness depends on an exact literal value (regex, format string,}
-{  query template, protocol sequence), embed it in a fenced code block.}
-{  Do not paraphrase — the code block IS the spec for that value.}
-{- For third-party API calls where kwargs affect behavior, specify the exact}
-{  call signature: "calls idna.encode(host) (without uts46=True)"}
-
-### Failure Modes
-{- Concrete: "Raises ValueError if n < 0", not "may raise errors"}
-{- Always specify the EXACT error type — not a parent type.}
-{  "catches BaseException" and "catches OSError" have different behavior.}
-{- For each error, state: **recovered** (caught, fallback, continues) or **propagated** (re-raised to caller)}
-{- Example: "If X raises FileNotFoundError: **recovered** — sets fallback_value, continues"}
-{- Example: "If Y raises PermissionError: **propagated** — closes handle, re-raises to caller"}
-
-### Test Strategy
-{- Actionable bullets. Someone should be able to write tests from this alone.}
-
----
-````
+Produce one `.engspec` file per source file in scope. For partial packages, only spec the target files. For incremental updates, only re-spec stale files — copy unchanged specs from the existing package. Do not invent your own format, reorder sections, rename headings, or add custom structure.
 
 **Do NOT add a Debate Log section.** That is added later by `engspec_tester`, not during `code→engspec` generation.
 
-### Rules for using the template
+### Versioning
 
-**Every section uses exactly these heading names, in this order.** If a section doesn't apply to a particular function (e.g., a pure function has no Failure Modes), omit the section entirely — don't include it with "N/A" or empty content.
-
-**The `##` heading MUST be the exact signature in backticks.** The signature is a contract — it defines the API that callers depend on. Include all parameter defaults exactly as they appear in the source. If a parameter has no default, it must not have one in the heading. Do not invent defaults.
-
-For regular functions:
-```
-## `function_name(param1: Type, param2: Type) -> ReturnType`
-```
-
-For types/classes, the heading includes the full type declaration — base types, interfaces, traits, and behavioral modifiers:
-```
-## `class Atom(metaclass=ABCMeta)`
-## `struct Point: Hash + Display`
-## `class Config extends BaseConfig implements Serializable`
-```
-Methods within the type use the standard function heading. Abstract/virtual/interface methods that must be implemented by subtypes should state this in Purpose: "Abstract — must be implemented by subtypes."
-
-**For file-level code** (top-level execution, mutable globals, interrelated constants), use the same template with a pseudo-function signature:
-```
-## `<file-level: description>`
-```
-
-A file can have multiple `<file-level>` sections:
-- `## \`<file-level: initialization>\`` — imports, setup calls, global init
-- `## \`<file-level: state>\`` — mutable globals, interrelated constants
-- `## \`<file-level: main loop>\`` — entry point / main block
-
-**When to use `<file-level>`:**
-
-| Situation | Action |
-|-----------|--------|
-| File has top-level execution (runs on import/load/execute) | Add a `<file-level>` section |
-| File has mutable globals or interrelated constants | Add a `<file-level: state>` section |
-| File has only simple constants (`PI = 3.14`) | No section — mention in function Preconditions |
-| File has nothing but functions | No section |
-
-For languages where everything is a function (Rust, Go, Java), `<file-level>` is rarely needed. `fn main()` and `func init()` are real functions and get regular sections.
-
-**What to skip entirely:**
-- Trivial getters/setters (unless they have validation logic)
-- Auto-generated code (unless the generation has important constraints)
-
-**Do NOT skip** methods that affect equality, hashing, ordering, comparison, or string representation — even if they look trivial. These determine how objects behave in collections, comparisons, and debugging output. Omitting them changes observable behavior.
-
-If a function's behavior is fully captured by its signature, Purpose alone is enough — omit other sections.
-
-### Section guidance
-
-| Section | Key rule |
-|---------|----------|
-| Purpose | 1-3 sentences. What and why, not how. When the function implements one standard/specification out of multiple common alternatives, state which it follows AND which it does not. "Follows RFC 3986" is incomplete without "does NOT implement WHATWG special-scheme behaviors" when both are common choices. Negative boundaries prevent the regenerator from adding behaviors the original deliberately excludes. |
-| Context | Callers, callees, test coverage status. |
-| Preconditions | Every input constraint. If a function silently accepts invalid input, note what happens. |
-| Postconditions | Every output guarantee. Include mutation guarantees ("input list is not modified"). |
-| Invariants | What doesn't change. Important for stateful objects. |
-| Implementation Notes | Only what affects correctness. Algorithm choice, not code style. SHORTER than source. When correctness depends on an exact literal value (regex pattern, format string, query template, protocol sequence, magic constant), embed it in a fenced code block — do not paraphrase. When calling third-party APIs where keyword arguments affect behavior, specify the exact call signature — e.g., "`idna.encode(host)` (without `uts46=True`)" — since different kwargs produce different results. |
-| Failure Modes | Concrete exceptions and conditions. Not "may raise errors". Always specify the **exact error type** — not a parent type ("catches BaseException" and "catches OSError" have different behavior). For each error, specify whether it is **recovered** (caught, fallback applied, execution continues) or **propagated** (re-raised to caller). |
-| Test Strategy | Actionable. Someone writes tests from this section alone. |
-
-### Test files
-
-Test files get `.engspec` specs just like source files. They use the same template with these adjustments:
-
-**Use the same template exactly.** The `##` heading is the test function signature. The sections mean:
-
-| Section | Meaning for test functions |
-|---------|---------------------------|
-| Purpose | What property or behavior this test verifies. |
-| Context | What source functions/modules this test covers. Link to their `.engspec` files. "Tests: dotenv.main.set_key()", "Tests: dotenv.parser.parse_binding()". |
-| Preconditions | **All test setup that affects correctness must be in code blocks.** List all required fixtures, files, and environment, but when the setup method matters, embed it as code. Don't write "test with an uppercase URL" — write: ```url = httpbin("get"); scheme = url.split("://")[0].upper(); url = scheme + url[len(scheme):]``` (uppercases only the scheme, not the path). Don't write "requires TLS cert files" — write: ```# Requires files created by conftest cert_fixture: client_cert = str(tmp_path / "client.pem")``` List ALL required fixture files, data files, and external resources explicitly — if a test needs a cert file, name it. |
-| Postconditions | **EVERY assertion must be written as a code block.** Do not describe assertions in English — embed the actual assertion expression. The code block IS the spec. This is mandatory because English paraphrasing of binary data, encoded values, and computed results introduces errors. Example: don't write "asserts the base64 output matches expected" — write: ```assert header == b"Basic dXNlcm5hbWU6cGFzc3dvcmQ="``` The comparison method matters too — `obj == expected` vs `convert(obj) == expected` produce different results. For parametrized tests, include the full parameter table as a code block. |
-| Invariants | What is cleaned up / restored after the test (tmp files deleted, env vars reset, etc.). |
-| Implementation Notes | **Use code blocks for any setup logic where the method matters.** Testing patterns: parametrize values, fixture chains, framework-specific runner usage. **For test doubles (mocks, stubs, patches, fakes):** specify the exact target being replaced (full qualified path), what it's replaced with, and any framework-specific arguments that affect behavior. When a mock must simulate multi-step behavior (e.g., redirect chains, retry sequences), embed the mock setup as a code block — don't describe it in English. A mock that returns a blank object vs one that returns the actual sent request will break different assertions. **For fixture data files** (JSON, CSV, YAML test data): specify the exact field/key used to access test input — e.g., "reads `test_case["href"]` (pre-resolved URL), NOT `test_case["input"]`." **For object lifecycle:** note whether objects are used with a context manager, async context manager, or plain construction — e.g., "creates client via `client = Client()` (no context manager)" vs "creates client via `async with AsyncClient() as client:`." |
-| Failure Modes | Omit — tests don't have failure modes (they either pass or fail). |
-| Test Strategy | Omit — tests don't need a test strategy for themselves. |
-
-**conftest.py files** get specs too. Fixtures are functions — each fixture gets a `##` section:
-
-```
-## `my_fixture(tmp_path) -> Path`
-
-### Purpose
-Creates a temporary .env file with KEY=value for testing.
-
-### Preconditions
-- tmp_path fixture is available (pytest built-in)
-
-### Postconditions
-- Returns Path to a file containing "KEY=value\n"
-- File exists on disk and is readable
-
-### Implementation Notes
-- Session-scoped — shared across all tests in the session
-```
-
-**`<file-level>` sections** for test files capture:
-- Module-level marks (`pytestmark = pytest.mark.usefixtures(...)`)
-- Shared test constants / test data
-- Parametrize data defined at module level
-
-**Regeneration verification** applies to test files too. A regenerated test must reproduce every assertion code block from the Postconditions section **exactly** — same values, same comparison methods, same expected outputs. Do not recompute expected values; copy them from the spec. If the spec says `assert result == b"\xc5\xa9sername"`, the regenerated test must use that exact byte sequence. A regeneration that changes any assertion value is a FAIL.
+For each `.engspec` file:
+1. **`source_commit`** (file-level): If the source is in a git repo, record the current commit hash of the source file: `git log -1 --format=%H -- <source-file>`. Set this during Phase 3.
+2. **`checksum`** (per-function): Compute after Phase 5 (Regeneration Verification) converges — this is when the spec is finalized. If Phase 4 (Self-Review) or Phase 5 modified the spec, the checksum must reflect the final version. Follow the canonical form defined in `engspec_format.md` and place it after the `##` heading.
 
 ---
 
-## Phase 4: Regeneration Verification
+## Phase 4: Self-Review
 
-This is the critical validation step. The spec is not done until **3 consecutive regenerations all pass without any spec changes between them**.
+Before running regeneration verification, do an adversarial pass to catch issues cheaply. Fixing problems now avoids wasted regeneration cycles.
+
+### Red Team (find problems)
+For each function, ask:
+- Is there an input that satisfies all preconditions but produces wrong output?
+- Is there a postcondition that the implementation doesn't actually guarantee?
+- Is there a failure mode not listed?
+- Could a caller reasonably violate a precondition that isn't documented?
+
+### Blue Team (defend or fix)
+For each finding:
+- Is it a real issue or a misreading of the spec?
+- If real: update the spec with the missing information
+- If not: explain why the spec is correct as-is
+
+### Record findings
+If you find real issues during self-review, fix them directly in the spec (update the relevant section). No need to log them — the formal Debate Log is added later by `engspec_tester`.
+
+---
+
+## Phase 5: Regeneration Verification
+
+This is the critical validation step. The spec is not done until **3 consecutive regenerations all pass without any spec changes between them**. Any fixes applied during Phase 4 (Self-Review) are now tested here.
 
 ### Overview
 
@@ -291,23 +186,24 @@ while consecutive_passes < 3:
         consecutive_passes += 1
     else:
         fix the spec based on what was missing
-        consecutive_passes = 0    # reset — need 5 clean in a row
+        consecutive_passes = 0    # reset — need 3 clean in a row
 ```
 
 **Hard limit: 20 total regenerations.** If you cannot achieve 3 consecutive passes within 20 regenerations, mark the spec as `status: failed` and report what could not be captured.
 
 ### Per-regeneration procedure
 
-**Step 1: Re-implement from spec alone**
+**Step 1: Launch a Regenerator agent**
 
-Pretend you cannot see the original source code. Using ONLY the `.engspec` you wrote, re-implement the function from scratch. Rules:
-- You have NO access to the original source
-- The reimplementation does NOT need to be character-identical
-- It MUST satisfy all preconditions, postconditions, invariants, and failure modes
-- Choose the most natural implementation given only the spec
-- Each regeneration must be independent — do NOT copy from previous attempts
+Launch a **separate agent** with the `.engspec` content for the entire file being verified and the following instructions: "You are a Regenerator. Using ONLY the `.engspec` provided, implement every function and file-level section as working code. Follow the exact signatures from the `##` headings. Satisfy all preconditions, postconditions, invariants, and failure modes. Follow Implementation Notes for algorithmic choices. For test files, reproduce code blocks from Preconditions, Postconditions, and Implementation Notes verbatim — do not recompute expected values, re-derive assertions, or improvise mock behavior. When the spec references third-party library calls, you may introspect installed packages to verify API signatures (e.g., `python -c 'import inspect; ...'`). Return the complete source file." Do NOT pass original source code or source file paths. The agent has never seen the original source — its isolation is architectural, not behavioral. The agent MAY access installed third-party packages for API introspection, matching the conditions under which `engspec_to_code` operates.
+
+Verification is **per-file**: the agent regenerates all functions in the file together, so file-level interactions (shared state, initialization order, mutual dependencies) are tested. If any function in the file fails comparison, the entire file fails and the consecutive pass counter resets.
+
+Each regeneration must use a fresh agent — do NOT reuse agents from previous attempts. Agent infrastructure failures (API errors, timeouts) do not count toward the 20-attempt budget — retry the agent call.
 
 **Step 2: Compare against original**
+
+Back in the main context (which has the original source), compare the agent's reimplementation against the original:
 
 | Check | Question |
 |-------|----------|
@@ -344,7 +240,7 @@ If the spec fails to converge after 20 regenerations:
 ```markdown
 <!-- status: failed -->
 <!-- regeneration_count: 20 -->
-<!-- regeneration_pass_rate: <best consecutive run, e.g. 3/5> -->
+<!-- regeneration_pass_rate: <best consecutive passes>/<required consecutive passes>, e.g. 2/3 -->
 <!-- failure_reason: <what could not be captured> -->
 ```
 
@@ -360,34 +256,12 @@ Regeneration  5: PASS — consecutive: 3 → VALIDATED (5 total, 3/3 final)
 
 ---
 
-## Phase 5: Self-Review (Optional but Recommended)
-
-After completing the `.engspec`, do a final adversarial pass:
-
-### Red Team (find problems)
-For each function, ask:
-- Is there an input that satisfies all preconditions but produces wrong output?
-- Is there a postcondition that the implementation doesn't actually guarantee?
-- Is there a failure mode not listed?
-- Could a caller reasonably violate a precondition that isn't documented?
-
-### Blue Team (defend or fix)
-For each finding:
-- Is it a real issue or a misreading of the spec?
-- If real: update the spec with the missing information
-- If not: explain why the spec is correct as-is
-
-### Record findings
-If you find real issues during self-review, fix them directly in the spec (update the relevant section). No need to log them — the formal Debate Log is added later by `engspec_tester`.
-
----
-
 ## Output Checklist
 
 Before delivering the `.engspec` file, verify:
 
-- [ ] Every public function/method in source files has a section
-- [ ] Every test file has a `.engspec` (including conftest.py)
+- [ ] Every public function/method in source files **in scope** has a section
+- [ ] Every test file **in scope** has a `.engspec` (including conftest.py)
 - [ ] File-level pseudo-functions exist for top-level execution, mutable globals, or interrelated constants (if applicable)
 - [ ] All metadata comments are present and accurate
 - [ ] Preconditions are specific (no vague "valid input")
@@ -398,213 +272,28 @@ Before delivering the `.engspec` file, verify:
 - [ ] Regeneration verification passed: 3 consecutive passes within 20 total attempts
 - [ ] Status is `validated` with `regeneration_pass_rate: 3/3`
 - [ ] The spec reads as self-contained English — no "see code for details"
+- [ ] Every function has a `<!-- checksum: ... -->` computed per `engspec_format.md`
+- [ ] File-level `<!-- source_commit: ... -->` is set (if in a git repo)
 
----
-
-## Example: Function-only file
-
-For a simple function like:
-```python
-def fibonacci(n: int) -> int:
-    if n < 0:
-        raise ValueError("n must be non-negative")
-    if n <= 1:
-        return n
-    a, b = 0, 1
-    for _ in range(2, n + 1):
-        a, b = b, a + b
-    return b
-```
-
-The `.engspec` would be:
-
-```markdown
-<!-- engspec v1 -->
-<!-- source: math_utils.py -->
-<!-- language: python -->
-<!-- model: claude-opus-4-6 -->
-<!-- status: validated -->
-<!-- validated: 2026-03-14T12:00:00Z -->
-<!-- regeneration_count: 5 -->
-<!-- regeneration_pass_rate: 3/3 -->
-
-## `fibonacci(n: int) -> int`
-
-### Purpose
-Computes the n-th Fibonacci number (0-indexed: fib(0)=0, fib(1)=1, fib(2)=1, ...).
-
-### Context
-- Called by: (varies by project)
-- Calls: none
-- Test coverage: (fill based on actual tests)
-
-### Preconditions
-- n is an integer >= 0
-
-### Postconditions
-- Returns the n-th Fibonacci number
-- Return value >= 0
-- fib(0) = 0, fib(1) = 1, fib(n) = fib(n-1) + fib(n-2) for n >= 2
-
-### Invariants
-- Pure function, no side effects
-- Deterministic
-
-### Implementation Notes
-- Iterative (not recursive), O(n) time, O(1) space
-
-### Failure Modes
-- Raises ValueError if n < 0
-- For very large n (e.g., n > 10^6), result may be slow due to big integer arithmetic
-
-### Test Strategy
-- Property: fib(n) = fib(n-1) + fib(n-2) for n in [2, 20]
-- Edge: fib(0) = 0, fib(1) = 1
-- Edge: n = -1 raises ValueError
-- Large: fib(100) = 354224848179261915075
-
----
-```
-
-No `<file-level>` section needed — the file is just a pure function with no top-level execution, mutable globals, or interrelated constants.
-
-## Example: File with top-level code and state
-
-For a game script like:
-```python
-import pygame
-
-SCREEN_W, SCREEN_H = 800, 600
-TICK_RATE = 60
-
-pygame.init()
-screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
-clock = pygame.time.Clock()
-
-score = 0
-ball_x, ball_y = SCREEN_W // 2, SCREEN_H // 2
-
-def reset_ball():
-    global ball_x, ball_y
-    ball_x, ball_y = SCREEN_W // 2, SCREEN_H // 2
-
-if __name__ == "__main__":
-    running = True
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-        reset_ball()
-        clock.tick(TICK_RATE)
-    pygame.quit()
-```
-
-The `.engspec` would be:
-
-```markdown
-<!-- engspec v1 -->
-<!-- source: game.py -->
-<!-- language: python -->
-<!-- model: claude-opus-4-6 -->
-<!-- status: validated -->
-<!-- validated: 2026-03-14T14:00:00Z -->
-<!-- regeneration_count: 7 -->
-<!-- regeneration_pass_rate: 3/3 -->
-
-## `<file-level: initialization>`
-
-### Purpose
-Initializes pygame subsystems and creates the display surface and clock.
-
-### Preconditions
-- pygame package is installed
-- Display server is available
-
-### Postconditions
-- pygame is initialized
-- `screen` is a pygame Surface of size (800, 600)
-- `clock` is a pygame.time.Clock instance
-- SCREEN_W = 800, SCREEN_H = 600, TICK_RATE = 60
-
-### Failure Modes
-- pygame.error if no display server is available
-
----
-
-## `<file-level: game state>`
-
-### Purpose
-Defines shared mutable state for the game.
-
-### Postconditions
-- `score` is initialized to 0
-- `ball_x` is initialized to SCREEN_W // 2 (400)
-- `ball_y` is initialized to SCREEN_H // 2 (300)
-
-### Invariants
-- `score` is always >= 0
-
-### Implementation Notes
-- `ball_x`, `ball_y` are module-level globals, modified by reset_ball()
-- `score` is a module-level global (not yet modified by any function in this file)
-
----
-
-## `reset_ball() -> None`
-
-### Purpose
-Resets ball position to center of screen.
-
-### Preconditions
-- SCREEN_W and SCREEN_H are defined (set during initialization)
-
-### Postconditions
-- `ball_x` = SCREEN_W // 2
-- `ball_y` = SCREEN_H // 2
-- `score` is unchanged
-
-### Invariants
-- Pure positional reset — no score or other state changes
-
----
-
-## `<file-level: main loop>`
-
-### Purpose
-Runs the game loop until the user closes the window.
-
-### Preconditions
-- Initialization block has run (screen, clock exist)
-- Game state is initialized (ball_x, ball_y, score exist)
-
-### Postconditions
-- Game exits cleanly, pygame.quit() is called
-- No resources leaked
-
-### Implementation Notes
-- Runs only when file is executed directly (`if __name__ == "__main__"`)
-- Loop: poll events → call reset_ball() → tick clock at TICK_RATE
-- Exits on pygame.QUIT event
-
-### Failure Modes
-- If initialization failed (no display), this block is never reached
-
----
-```
-
-Note: the spec is **shorter** than the code but captures everything needed to reimplement it correctly, including the file-level behavior.
+See `engspec_format.md` for complete examples of validated `.engspec` files (function-only, file with top-level code, post-audit with Debate Log).
 
 ---
 
 ## Phase 6: Package Output
 
-After all `.engspec` files are validated, produce a standalone output package.
+After all `.engspec` files in scope are validated, produce a standalone output package.
+
+### Partial and incremental packages
+
+- **Partial**: the package contains specs only for the target files. Set `"coverage": "partial"` and populate `"scope"` and `"external_references"` in the manifest.
+- **Incremental**: merge new/updated specs with unchanged specs from the existing package. Preserve unchanged spec files, their checksums, and their validation status. The call graph and test coverage are regenerated in Phase 2 (see above). Set `"coverage"` to match the existing package's coverage. If a source file was **deleted** since the last generation, remove its spec from the package and its entry from the manifest.
+- **Full**: the package contains specs for every source file (the default).
 
 ### What to include
 
 Create a folder named `<project-name>-engspec/` containing:
 
-1. **All `.engspec` files** — mirroring the source directory structure. This includes specs for both source files AND test files.
+1. **`.engspec` files** for all source files in scope — mirroring the source directory structure. This includes specs for both source files AND test files.
 2. **All non-code files from the repo** — copied verbatim, mirroring directory structure. These are files needed to regenerate a working project but that aren't source code:
    - Config files: `*.yaml`, `*.yml`, `*.toml`, `*.ini`, `*.cfg`, `*.conf`, `*.json`, `*.xml`
    - Documentation: `*.md`, `*.rst`, `*.txt` (README, CONTRIBUTING, CHANGELOG, etc.)
@@ -666,80 +355,7 @@ Create a folder named `<project-name>-engspec/` containing:
 
 ### manifest.json format
 
-```json
-{
-  "project": "<project-name>",
-  "generated": "<ISO 8601 timestamp>",
-  "source_repo": "<git URL or local path>",
-  "languages": ["python"],
-  "files": [
-    {
-      "spec": "specs/src/main.py.engspec",
-      "source": "src/main.py",
-      "type": "source",
-      "language": "python",
-      "status": "validated",
-      "regeneration_count": 7,
-      "regeneration_pass_rate": "3/3",
-      "functions": 4,
-      "file_level_sections": 2
-    },
-    {
-      "spec": "specs/tests/conftest.py.engspec",
-      "source": "tests/conftest.py",
-      "type": "test",
-      "language": "python",
-      "status": "validated",
-      "regeneration_count": 5,
-      "regeneration_pass_rate": "3/3",
-      "functions": 3,
-      "file_level_sections": 0
-    },
-    {
-      "spec": "specs/tests/test_main.py.engspec",
-      "source": "tests/test_main.py",
-      "type": "test",
-      "language": "python",
-      "status": "validated",
-      "regeneration_count": 6,
-      "regeneration_pass_rate": "3/3",
-      "functions": 12,
-      "file_level_sections": 1
-    }
-  ],
-  "non_code_files": [
-    {
-      "path": "non_code/README.md",
-      "original_path": "README.md",
-      "type": "documentation"
-    },
-    {
-      "path": "non_code/pyproject.toml",
-      "original_path": "pyproject.toml",
-      "type": "build"
-    },
-    {
-      "path": "non_code/configs/settings.yaml",
-      "original_path": "configs/settings.yaml",
-      "type": "config"
-    },
-    {
-      "path": "non_code/assets/sprite.png",
-      "original_path": "assets/sprite.png",
-      "type": "asset"
-    }
-  ],
-  "summary": {
-    "total_specs": 5,
-    "validated": 5,
-    "failed": 0,
-    "total_functions": 23,
-    "total_file_level_sections": 4,
-    "total_regenerations": 31,
-    "total_non_code_files": 6
-  }
-}
-```
+Follow the Manifest Schema defined in `engspec_format.md`. Populate `coverage`, `scope`, and `external_references` based on the scope determined in Phase 1. Include `source_commit` for every file entry (omit only if not in a git repo).
 
 ### Zip it
 
@@ -772,3 +388,11 @@ The `.engspec` package is a **standalone artifact**. It contains everything need
 - Feed into `engspec_tester` for adversarial analysis
 
 It should be usable by someone who has never seen the original repo.
+
+---
+
+## Operational Requirements
+
+This workflow requires the most capable available model for all agents and sub-agents. Spec quality degrades significantly with smaller or faster models — regeneration verification will fail more often, producing weaker specs.
+
+When using Claude Code, pass `model: "opus"` for ALL agent invocations (Explore, Plan, general-purpose, and any other agent type). Do not use Sonnet or Haiku for any agent in this workflow.

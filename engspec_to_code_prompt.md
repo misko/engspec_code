@@ -2,7 +2,7 @@
 
 Use this document as instructions to regenerate a full, working codebase from an `.engspec` package. You will produce source code files from specs alone, set up the project, and run tests to verify correctness.
 
-**CRITICAL — Model requirement:** You MUST use `model: "opus"` for ALL agents, sub-agents, and tool calls that spawn agents — including Explore, Plan, general-purpose, and any other agent type. No exceptions. Do not use Sonnet or Haiku for any agent in this workflow. When calling the Agent tool, always pass `model: "opus"`. This applies to every agent invocation for the entire duration of this task.
+The `.engspec` format — template, metadata, versioning, and checksum rules — is defined in `engspec_format.md`. Read it before proceeding.
 
 ---
 
@@ -24,6 +24,17 @@ Read /path/to/engspec_to_code_prompt.md for your instructions.
 Here is the engspec package at /path/to/<project-name>-engspec/
 
 Please regenerate the full codebase and run tests.
+```
+
+### Partial package (some source files already exist)
+
+```
+Read /path/to/engspec_to_code_prompt.md for your instructions.
+
+Here is the engspec package: /path/to/project-engspec/
+Here is the existing codebase at: /path/to/existing-repo/
+
+Please regenerate only the spec'd files into the existing codebase.
 ```
 
 ---
@@ -59,8 +70,12 @@ Read `project_context.md` first. This tells you:
 ### Step 3: Read manifest
 
 Read `manifest.json` to get:
-- The full list of spec files to regenerate, their languages, and validation status. Only regenerate from `"status": "validated"` specs. Report any `"status": "failed"` specs as warnings.
+- The full list of spec files to regenerate, their languages, and validation status. Only regenerate from `"status": "validated"` specs. For `"status": "failed"` specs that are imported by other files (check the call graph): generate a **stub file** containing only the function signatures and type definitions from the spec's `##` headings. For source file stubs, use `raise NotImplementedError('Spec not validated — stub only')` for bodies. For test file stubs, use the language's skip mechanism instead (e.g., `pytest.skip('Spec not validated')` for Python, `t.Skip()` for Go) so they don't pollute test results with false failures. Report all stubs in the validation report.
 - The full list of `non_code_files` — these will be copied verbatim to their original paths in the regenerated project.
+
+Check the `"coverage"` field. If `"partial"`, read `"external_references"` to identify source files that must already exist — they are not regenerated from spec. The user must provide the existing codebase path for these.
+
+Also note the versioning metadata in each `.engspec` file (see `engspec_format.md`): `source_commit` tells you which source version the spec was written against, per-function `checksum` lets you verify spec integrity, and `audited` tells you when the tester last reviewed each function. Report any integrity issues (mismatched checksums, stale source_commit) in the validation report.
 
 ### Step 4: Read call graph
 
@@ -71,6 +86,10 @@ Read `call_graph.md` to understand the dependency order. You will regenerate fil
 ## Phase 2: Restore Project and Install Dependencies
 
 Set up the project environment BEFORE generating any source code. This ensures third-party APIs are available for introspection during regeneration.
+
+### Step 0: Handle partial packages
+
+If the manifest has `"coverage": "partial"`, the user must provide the existing codebase path. Copy the existing codebase to the output directory first. Verify that all files listed in `"external_references"` exist at their expected paths. Then overwrite only the files being regenerated from specs. External files are treated as already-regenerated when determining dependency order.
 
 ### Step 1: Restore non-code files
 
@@ -152,6 +171,7 @@ Read the full `.engspec` file. Note:
 - All `## \`function_signature()\`` sections — these become functions
 - All `## \`<file-level: ...>\`` sections — these become top-level code
 - The ordering of sections in the `.engspec` reflects the logical ordering in the source file
+- **Ignore `### Debate Log` sections entirely** — they are audit history. All findings from debate have already been incorporated into the spec sections (Purpose, Preconditions, etc.).
 
 ### Step 2: Regenerate file-level code
 
@@ -235,6 +255,7 @@ If there are import errors or compilation failures, fix them. Common issues:
 - Follow the language's idiomatic conventions (PEP 8 for Python, rustfmt for Rust, etc.)
 - Add necessary imports that the spec implies but doesn't explicitly list (e.g., if Postconditions mention returning a `dict`, import `dict` if needed in the language)
 - If the spec is ambiguous about something, make the most natural choice and add a `# NOTE: spec ambiguous — chose X over Y` comment
+- **For `[external]` callees:** do NOT regenerate them — they already exist as source. You MAY introspect the existing source file to verify type compatibility (import it, check signatures), similar to how you introspect third-party libraries.
 - **For test files:** code blocks in Preconditions, Postconditions, and Implementation Notes are exact — copy them verbatim into the regenerated test. Do NOT recompute expected values, re-derive setup logic, or improvise mock behavior. If the spec has a code block showing how to construct a URL, mock a redirect chain, or assert a byte sequence, reproduce it exactly.
 
 ---
@@ -311,7 +332,7 @@ For each failure:
 4. If the code violates the spec: fix the code to match the spec, re-run
 5. If the test seems wrong: report as a potential spec gap
 
-Repeat until all tests pass or you've identified genuine spec gaps.
+**Hard limit: 5 fix-and-rerun iterations.** If tests still fail after 5 attempts, stop and report remaining failures in the validation report. Categorize each as: (a) spec gap — spec didn't contain enough information, (b) regeneration error — code doesn't match the spec, or (c) environment issue — missing system libraries, network dependencies, etc.
 
 ---
 
@@ -345,6 +366,17 @@ These should be fed back to the original .engspec files for refinement.
 List any places where the spec was ambiguous and you had to make a choice.
 Include the choice you made and why.
 
+## Stub Files (from failed specs)
+| Source File | Functions Stubbed | Dependent Files |
+|-------------|-------------------|-----------------|
+
+## Partial Coverage (if applicable)
+- Coverage: full / partial
+- Files regenerated from spec: N
+- External files (pre-existing): N
+- External files verified: N
+- External files missing: (list if any)
+
 ## Notes
 Any other observations about the regeneration process.
 ```
@@ -364,3 +396,11 @@ Any other observations about the regeneration process.
 5. **Report gaps, don't paper over them.** If the spec is missing something and you have to invent behavior, mark it clearly. The goal is to find spec gaps, not to hide them.
 
 6. **Tests are the final check.** If tests pass, the regeneration is successful. If they fail, the spec or the regeneration needs fixing — determine which.
+
+---
+
+## Operational Requirements
+
+This workflow requires the most capable available model for all agents and sub-agents. Spec quality degrades significantly with smaller or faster models.
+
+When using Claude Code, pass `model: "opus"` for ALL agent invocations (Explore, Plan, general-purpose, and any other agent type). Do not use Sonnet or Haiku for any agent in this workflow.

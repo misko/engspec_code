@@ -2,11 +2,11 @@
 
 Use this document as instructions to run adversarial analysis on `.engspec` files. You will find spec gaps, ambiguities, internal contradictions, and missing edge cases through structured Red/Blue/Judge debate, then update the specs with your findings.
 
-**Two modes of operation:**
-- **Spec + Source** (recommended): provide both the engspec package and the source repo. Red and Blue see source code, enabling them to find divergence between spec and implementation. The Judge still never sees source.
-- **Spec only**: provide just the engspec package. All roles work from specs alone. Use this when source code is unavailable.
+The `.engspec` format — template, metadata, versioning, checksum rules, round output format, and report template — is defined in `engspec_format.md`. Read it before proceeding.
 
-**CRITICAL — Model requirement:** You MUST use `model: "opus"` for ALL agents, sub-agents, and tool calls that spawn agents — including Explore, Plan, general-purpose, and any other agent type. No exceptions. Do not use Sonnet or Haiku for any agent in this workflow. When calling the Agent tool, always pass `model: "opus"`. This applies to every agent invocation for the entire duration of this task.
+**Two modes of operation:**
+- **Spec + Source** (recommended): provide both the engspec package and the source repo. Red and Blue see source code. The Blind Judge still never sees source.
+- **Spec only**: provide just the engspec package. All roles work from specs alone.
 
 ---
 
@@ -39,173 +39,102 @@ Please run adversarial analysis.
 
 ### Step 1: Read project context
 
-If given a zip, extract it. You should find:
-
-```
-<project-name>-engspec/
-├── project_context.md
-├── call_graph.md
-├── test_coverage.md
-├── manifest.json
-├── specs/
-│   └── ... .engspec files
-└── non_code/
-    └── ... config, docs, assets
-```
-
-Read `project_context.md`, `call_graph.md`, `test_coverage.md`, and `manifest.json`.
-
-If source repo is provided, verify that the `.engspec` files correspond to the source files.
+If given a zip, extract it. Read `project_context.md`, `call_graph.md`, `test_coverage.md`, and `manifest.json`. Check `"coverage"` — if `"partial"`, load `"external_references"` to understand which callees are outside the spec boundary. If source repo is provided, verify that the `.engspec` files correspond to the source files.
 
 ### Step 2: Build the function map
 
-For every `.engspec` file, build a map of:
-- Function name → its full spec (Purpose, Preconditions, Postconditions, etc.)
-- Function name → its source code (if source repo is provided)
-- Function name → its callers and callees (from Context sections)
-- Function name → which spec file it lives in
+For every `.engspec` file, build a map of: function name → full spec, source code (if available), callers/callees (from Context), and which spec file it lives in. Mark functions tagged `[external]` in Context sections — these have no spec and are outside the analysis boundary.
 
 ### Step 3: Identify analysis targets
 
-Analyze **both source specs and test specs**. The manifest marks each spec with `"type": "source"` or `"type": "test"` — you must debate both. Test specs are where most regeneration failures occur (wrong API usage, wrong fixture setup, wrong assertion logic), so do not skip them.
+Analyze **both source specs and test specs** (`"type": "source"` and `"type": "test"` in manifest). Test specs are where most regeneration failures occur — do not skip them.
 
-**Source spec priorities:**
-1. **Weak test coverage** — functions where the Context or Test Strategy says "not tested" or has gaps
-2. **Complex call chains** — functions that call many others or are called by many (high composition risk)
-3. **Error handling** — functions with Failure Modes sections (recovered/propagated errors are common gap sources)
-4. **File-level pseudo-functions** — `<file-level>` sections that set up state used by many functions
-5. **Negative boundaries** — functions whose Purpose mentions what they do NOT implement (these are easy to under-specify)
-
-**Test spec priorities:**
-1. **Tests with complex setup** — tests with mocks, patches, fixture chains, or multi-step setup in Preconditions
-2. **Tests with computed expected values** — tests where Postconditions involve encoded data, transformed values, or derived results (these are prone to regeneration errors)
-3. **Tests covering error paths** — tests that verify Failure Modes are the most likely to have wrong setup
-4. **Parametrized tests** — tests with parameter tables where one wrong value breaks many cases
-5. **Integration tests** — tests that exercise multiple source functions together (composition bugs surface here)
-
-Skip trivial functions/tests where the spec is clearly complete (simple getters, identity transforms, trivial assertion-only tests).
+**Prioritize:** (1) weak test coverage, (2) complex call chains, (3) error handling, (4) file-level pseudo-functions, (5) negative boundaries. For test specs: (1) complex setup/mocks, (2) computed expected values, (3) error path tests, (4) parametrized tests, (5) integration tests. Skip trivial functions where the spec is clearly complete.
 
 ---
 
 ## Phase 2: Batch into Subgraphs
 
-Group functions into related subgraphs of **at most 10 functions** each.
+Group functions into subgraphs of **at most 10** each. Source subgraphs are grouped by call graph (walk from roots, depth 3, split at module boundaries). Test subgraphs are grouped by the source module they cover, including the relevant source specs.
 
-**Source spec subgraphs** — grouped by call graph:
-1. Start from each root function (entry point with no callers in the project)
-2. Walk the call graph to collect its callees up to depth 3
-3. If a subgraph exceeds 10, split at natural boundaries (module boundaries, separate concerns)
-4. Functions that appear in multiple subgraphs are debated in the subgraph where they are most central
-
-**Test spec subgraphs** — grouped by what they test:
-1. Group tests by the source module they cover (from the Context section)
-2. Include the source specs they test in the same subgraph so Red can check composition between test setup and source preconditions
-3. conftest fixtures go in every subgraph that uses them
-
-Debate source subgraphs first, then test subgraphs. This way, source spec fixes from earlier rounds benefit the test spec debate.
-
-Each subgraph is debated independently. Subgraphs can be processed in parallel within their category.
+Debate source subgraphs first, then test subgraphs. Subgraphs can be processed in parallel within their category.
 
 ---
 
 ## Phase 3: Debate
 
-For each subgraph, run the debate protocol. You play all three roles in sequence within each round. **This is the core of the analysis.**
+For each subgraph, run the debate protocol. You play Red and Blue, then launch separate agents for the Judges. **This is the core of the analysis.**
 
-### The Three Roles
+### The Four Roles
 
-| Role | Sees Source? | Sees Spec? | Sees Project Context? | Goal |
-|------|-------------|-----------|----------------------|------|
-| **Red** (Attacker) | Yes (if available) | Yes | Yes | Find violations, ambiguities, gaps, composition failures |
-| **Blue** (Defender) | Yes (if available) | Yes | Yes | Argue correctness, propose fixes |
-| **Judge** (Arbiter) | **NEVER** | Yes | Yes | Rule on each challenge using spec only |
+| Role | Sees Source? | Runs As | Goal |
+|------|-------------|---------|------|
+| **Red** (Attacker) | Yes (if available) | Main context | Find gaps, ambiguities, composition failures |
+| **Blue** (Defender) | Yes (if available) | Main context | Argue correctness, propose fixes |
+| **Blind Judge** | **NEVER** | Separate agent | Rule using spec only — tests self-containment |
+| **Sighted Judge** | Yes (if available) | Separate agent | Rule with source context — tests accuracy |
 
-**CRITICAL: The Judge never sees source code, even when source is available.** This forces the spec to be the source of truth. If the spec is too ambiguous for the Judge to rule, that is automatically a SpecGap — regardless of whether the source code handles it correctly.
+**Disagreements are the highest-value signal:**
 
-### Red Agent Attack Strategies
+| Blind | Sighted | Meaning | Action |
+|-------|---------|---------|--------|
+| SpecGap | NoIssue | Ambiguous spec, correct code | Clarify spec → tag `clarification` |
+| NoIssue | SpecGap | Spec confidently wrong | Fix spec → tag `silent_divergence`, severity `critical` |
 
-**When source is available**, Red compares spec against implementation:
+In spec-only mode, only the Blind Judge runs.
 
-1. **Spec-source divergence**: Does the source do something the spec doesn't describe? Does the spec describe something the source doesn't do?
-2. **Undocumented behavior**: Does the source handle edge cases not mentioned in the spec?
-3. **Wrong negative boundaries**: Does the source implement behaviors the Purpose says it excludes?
-4. **Missing error paths**: Does the source catch/handle errors not listed in Failure Modes?
-5. **Third-party API details**: Does the source call third-party APIs with kwargs or arguments not captured in Implementation Notes?
+### Red Attack Strategies
 
-**Whether or not source is available**, Red also attacks the spec itself:
+**Source-dependent** (skip in spec-only mode):
 
-6. **Reimplementation test**: Re-implement the function from the spec alone. If the spec is ambiguous enough that two reasonable implementations would differ, that's a challenge.
-7. **Precondition/Postcondition consistency**: Could a valid input (satisfying all preconditions) produce output that violates a postcondition?
-8. **Composition verification**: Walk the call graph. Does each callee's postconditions satisfy the caller's preconditions?
-9. **Failure mode completeness**: For each precondition, what happens when it's violated? Is there a corresponding failure mode?
-10. **Cross-function state**: Do functions that share mutable state have consistent invariants?
-11. **Test strategy gaps**: Does the Test Strategy cover all postconditions, failure modes, and edge cases?
+| # | Strategy | Question |
+|---|----------|----------|
+| 1 | Spec-source divergence | Does source do something spec doesn't describe, or vice versa? |
+| 2 | Undocumented behavior | Does source handle edge cases not in the spec? |
+| 3 | Wrong negative boundaries | Does source implement behaviors Purpose says it excludes? |
+| 4 | Missing error paths | Does source catch/handle errors not in Failure Modes? |
+| 5 | Third-party API details | Does source call APIs with kwargs not in Implementation Notes? |
+
+**Always applicable:**
+
+| # | Strategy | Question |
+|---|----------|----------|
+| 6 | Usage-grounded analysis | Trace callers → find real value ranges → verify hardcoded limits. Apply the Hardcoded Limit Checklist in `engspec_format.md`. Zero-margin = minimum `major`. |
+| 7 | Reimplementation test | Could two reasonable implementations from this spec differ? |
+| 8 | Pre/postcondition consistency | Could a valid input produce output violating a postcondition? |
+| 9 | Composition verification | Does each callee's postconditions satisfy its caller's preconditions? Skip for `[external]` callees (no spec). If source available, do best-effort check against source. |
+| 10 | Failure mode completeness + defense chain | For each precondition: what happens when violated? Cite guard `file:line` (or "unguarded"). Require tests BEYOND limits, not just AT. Auto-escalate if unguarded AND untested beyond boundary. |
+| 11 | Cross-function state | Do functions sharing mutable state have consistent invariants? |
+| 12 | Test strategy gaps | Does Test Strategy cover all postconditions, failure modes, edge cases? |
+| 13 | External boundary analysis | For each `[external]` callee: does the caller document what it expects from it? Does it handle failure modes from the external function? Flag missing boundary documentation as `composition_gap`. |
 
 ### Round Protocol
 
 For each round, process every function in the subgraph:
 
-**Step 1: Red Agent**
+**Step 1 — Red:** Produce 0-5 challenges. Each has: **category** (one of: `spec_source_divergence`, `spec_ambiguity`, `composition_gap`, `missing_failure_mode`, `postcondition_gap`, `negative_boundary_leak`, `invariant_conflict`, `test_coverage_gap`, `unguarded_constraint`), **concrete scenario**, **the gap**, and **severity**. Do not repeat prior findings.
 
-You receive: the function's spec, callee specs (for composition checks), project context, call graph, all previous findings, and source code (if available).
+**Severity** has two dimensions: *impact* (`critical` = incorrect regeneration or silent corruption; `major` = real edge case or zero-margin boundary; `minor` = unlikely or cosmetic) and *silent failure escalator* (auto-escalate one level if failure is silent, blocked only by citing the exact guard). Format: `[category/impact→escalated]` or `[category/impact]`. Track escalations in two buckets for the report: `silent-failure` (silent failure escalator applied) and `unguarded-untested` (strategy #10 defense chain escalator applied).
 
-Produce 0-5 challenges. Each challenge has:
-- **Category**: one of:
-  - `spec_source_divergence` — source does something spec doesn't capture (only when source available)
-  - `spec_ambiguity` — two reasonable implementations from this spec would differ
-  - `composition_gap` — callee's postconditions don't satisfy caller's preconditions
-  - `missing_failure_mode` — precondition violation behavior not documented
-  - `postcondition_gap` — postcondition doesn't cover an output case
-  - `negative_boundary_leak` — excluded behavior not sufficiently constrained
-  - `invariant_conflict` — shared state invariants between functions are inconsistent
-  - `test_coverage_gap` — postcondition or failure mode with no test strategy
-- **Concrete scenario**: a specific input or call sequence, not a vague concern
-- **The gap**: what's missing, ambiguous, or contradictory — and how it would cause incorrect regeneration
-- **Severity**: `critical` (would cause incorrect regeneration), `major` (edge case with real impact), `minor` (unlikely or cosmetic)
+**Step 2 — Blue:** For each challenge: verdict (`agree`/`disagree`/`partial`), reasoning citing spec sections, and proposed fix if agreeing. **Guard citation required**: In spec+source mode, Blue must cite exact `file:line`. In spec-only mode, Blue must cite the exact spec section and bullet (e.g., "Failure Modes bullet 3 documents the ValueError guard"). Vague claims like "there's probably a check somewhere" are invalid in either mode — Judges treat uncited defenses as no defense offered.
 
-Do NOT repeat challenges from previous rounds. Review all prior findings before producing new ones.
+**Step 3 — Sanitize challenges for Blind Judge:** Before launching the Blind Judge, produce a **spec-only version** of each Red challenge. Strip all source-specific references: file paths, line numbers, source code snippets, and descriptions of source behavior. Reframe each challenge as a spec concern only. Example:
+- Full (for Sighted Judge): "Source at line 47 catches `ConnectionResetError` but spec only lists `IOError` in Failure Modes"
+- Sanitized (for Blind Judge): "Failure Modes lists `IOError` but doesn't specify behavior for `ConnectionResetError` — a reasonable implementer might handle it differently"
 
-**Step 2: Blue Agent**
+Challenges that are already spec-only (e.g., `spec_ambiguity`, `composition_gap`) can be passed unchanged.
 
-You receive: everything Red received, plus Red's challenges.
+For `spec_source_divergence` challenges: reframe as a question about what the spec covers, without revealing what the source does. The Blind Judge's job is to determine if the spec *should* address the scenario, not whether the source is right. Example:
+- Full: "Source silently discards malformed headers instead of raising ValueError"
+- Sanitized: "Spec doesn't specify behavior when headers are malformed — a reasonable implementer could raise, discard, or log"
 
-For each challenge, respond with:
-- **Verdict**: `agree`, `disagree`, or `partial`
-- **Reasoning**: reference specific spec sections
-- If `agree`: propose a spec fix (which section, what to add/change)
-- If `disagree`: explain why the spec already covers this, citing specific bullets
-- If `partial`: explain what's covered and what's missing
+**Step 4 — Launch Judges as separate agents:**
+- **Blind Judge:** Launch a separate agent. Pass it ONLY: function spec, `project_context.md`, **sanitized** challenges, Blue's responses, and the following instructions: "You are a Judge evaluating spec quality. For each challenge, rule: **SpecGap** (spec is incomplete or ambiguous — specify which section needs what), **NoIssue** (spec already covers this — cite the specific bullet), or **SpecConflict** (two parts of the spec contradict — identify both). Optionally recommend a TestAddition. You have no access to source code — rule based on the spec alone." No source code, no source paths, no unsanitized challenges.
+- **Sighted Judge** (spec+source mode only): Launch a second separate agent with the same instructions as the Blind Judge, plus: **full** (unsanitized) challenges, and the relevant source code files. Add to the instructions: "You also have access to the source code. Use it to verify whether the spec accurately describes the implementation."
 
-**Step 3: Judge Agent**
+**Step 5 — Compare rulings:** Per the disagreement table above; prefer the stricter ruling on disagreements.
 
-You receive: the function's spec, project context, Red's challenges, and Blue's responses. **You do NOT receive source code, even when it was available to Red and Blue.**
-
-For each challenge, rule:
-- **SpecGap** → the spec is incomplete or ambiguous. Action: `SpecUpdate` required. Specify which section and what to add.
-- **NoIssue** → the spec already covers this adequately. Blue's defense holds. Action: `NoAction`.
-- **SpecConflict** → two parts of the spec contradict each other. Action: `SpecUpdate` to resolve the contradiction.
-
-Optionally for any ruling: recommend a `TestAddition` to the Test Strategy section.
-
-### Output Format Per Round
-
-For each function debated in the round, produce a findings block:
-
-```markdown
-### Round {N}: `{function_name}`
-
-#### Red Challenges
-1. **[spec_ambiguity/major]** Postcondition says "returns normalized URL" but Implementation Notes don't define normalization. A regenerator could implement WHATWG normalization (lowercase scheme + host, resolve dots) or minimal RFC 3986 (percent-encoding only). These produce different outputs for `HTTP://Example.COM/../foo`.
-   - Scenario: input `HTTP://Example.COM/../foo`
-   - Implementation A (WHATWG): `http://example.com/foo`
-   - Implementation B (RFC 3986 minimal): `HTTP://Example.COM/../foo`
-
-#### Blue Responses
-1. **partial** — Purpose says "follows RFC 3986 only, does NOT implement WHATWG." This constrains the normalization. However, RFC 3986 itself has multiple normalization levels (case, percent-encoding, path-segment). The spec should specify which level.
-
-#### Judge Rulings
-1. **SpecGap** — Purpose excludes WHATWG but doesn't specify the RFC 3986 normalization level. Action: SpecUpdate — add to Implementation Notes: "Applies RFC 3986 Section 6.2.2 syntax-based normalization (case, percent-encoding, path-segment removal)."
-```
+Follow the round output format defined in `engspec_format.md`.
 
 ---
 
@@ -213,130 +142,68 @@ For each function debated in the round, produce a findings block:
 
 After each round, apply findings immediately:
 
-### SpecGap / SpecConflict Rulings → Update the .engspec file
-
-For each SpecGap or SpecConflict ruling:
-1. Identify which section needs updating (Preconditions, Postconditions, Failure Modes, Implementation Notes, Purpose, etc.)
-2. Add the missing information directly to the `.engspec` file
-3. Add a Debate Log entry to the function's section:
-
-```markdown
-### Debate Log
-| Round | Agent | Finding | Ruling | Action |
-|-------|-------|---------|--------|--------|
-| 1 | Red | Normalization level not specified | SpecGap | Added RFC 3986 §6.2.2 to Implementation Notes |
-| 2 | Red | Composition gap: callee doesn't guarantee non-null | SpecGap | Added precondition to caller |
-```
-
-### NoIssue Rulings with TestAddition
-
-If the Judge suggests adding a test even though the spec is adequate, add it to the Test Strategy section of the `.engspec` file.
+1. For each SpecGap/SpecConflict: update the `.engspec` file and add a Debate Log entry (see `engspec_format.md` for table schema)
+2. For NoIssue with TestAddition: add to Test Strategy section
+3. **Recompute checksums** for modified functions per `engspec_format.md`. Update per-function `audited` timestamps. Update `source_commit` if re-verified against source. Do NOT update the file-level `validated` timestamp — it refers to the original regeneration validation by `engspec_prompt`. If spec content changed significantly, note in the report that re-validation via `engspec_prompt` is recommended.
 
 ---
 
 ## Phase 5: Convergence
 
-Track findings across rounds. The analysis is complete when you reach convergence or hit the hard cap.
+Deduplicate findings across rounds (same concern worded differently = duplicate).
 
-### Deduplication
+**Convergence rules:**
+- If a subgraph has **never had any findings** (0 findings in the first round), it is converged immediately — do not run empty rounds.
+- If a subgraph **has had findings** (at least one finding in any round), it requires **3 consecutive clean rounds** (zero novel findings after dedup) to converge. This proves the fixes stabilized.
+- **Hard cap**: 20 rounds per subgraph regardless.
 
-Before counting a round's findings, deduplicate against all previous findings. Two findings are duplicates if they describe the same spec concern, even if worded differently:
-- "empty list behavior not specified" ≈ "passing [] has undefined result" → duplicate
-- "empty list behavior not specified" vs "None input not in failure modes" → distinct
+Confidence score per subgraph:
 
-### Convergence criteria
-
-- **Converged**: 3 consecutive rounds with zero novel findings (after dedup) across all functions in the subgraph
-- **Hard cap**: 20 rounds per subgraph — stop even if not converged
-- If not converged after 20 rounds, note this in the report
-
-### Confidence score
-
-After convergence (or hard cap), compute a confidence score per subgraph:
+Per-subgraph confidence:
 
 ```
 confidence = 0.3 * round_factor + 0.4 * resolution_rate + 0.3 * clean_factor
 
 round_factor    = min(total_rounds / 10, 1.0)
 resolution_rate = resolved_findings / total_findings  (1.0 if no findings)
-clean_factor    = consecutive_clean_rounds / 3         (capped at 1.0)
+clean_factor    = min(consecutive_clean_rounds / 3, 1.0)
+
+Exception: if a subgraph converged immediately (0 findings in first round),
+set clean_factor = 1.0 (a single clean round is conclusive when there are
+no fixes to verify).
 ```
+
+Overall confidence (for the report): weighted average of per-subgraph scores, weighted by function count in each subgraph.
 
 ---
 
 ## Phase 6: Report
 
-After all subgraphs have converged (or hit the cap), produce a report.
+Produce a report following the Analysis Report Format in `engspec_format.md`. For partial packages, include an **External Boundaries** section listing each `[external]` callee, whether the boundary is documented in the caller's spec, and the assessed risk.
 
-### Report format
-
-```markdown
-# Adversarial Analysis Report: <project-name>
-
-## Summary
-- Mode: spec + source / spec only
-- Functions analyzed: N
-- Subgraphs: N
-- Total rounds: N
-- Findings: N (SpecGap: N, SpecConflict: N, NoIssue: N)
-- Spec updates applied: N
-- Tests added to spec: N
-- Overall confidence: X.XX
-
-## Findings by Severity
-
-### Critical
-- `function_name` [SpecGap]: description (Round N) — FIXED in spec
-
-### Major
-- `function_name` [SpecGap]: description (Round N) — FIXED in spec
-
-### Minor
-- `function_name` [SpecGap]: description (Round N) — FIXED in spec
-
-## Spec Conflicts Found
-| Function | Contradiction | Resolution | Round |
-|----------|--------------|------------|-------|
-
-## Spec Updates Applied
-| Function | Section Updated | What was added | Round |
-|----------|----------------|----------------|-------|
-
-## Tests Added to Spec
-| Function | Test Description | From Round |
-|----------|-----------------|------------|
-
-## Confidence Scores
-| Subgraph | Functions | Rounds | Findings | Resolved | Confidence |
-|----------|-----------|--------|----------|----------|------------|
-
-## Convergence Details
-| Subgraph | Converged? | Clean Rounds | Total Rounds |
-|----------|-----------|--------------|--------------|
-```
-
-### Output artifacts
-
-1. **Updated `.engspec` files** — with Debate Log entries and spec fixes applied
-2. **Report** — `<project-name>-analysis-report.md`
-3. **Updated package** — repackage as `<project-name>-engspec-tested.zip` (or update in place if working from an extracted directory)
+**Output artifacts:**
+1. Updated `.engspec` files with Debate Log entries and fixes
+2. Report: `<project-name>-analysis-report.md`
+3. Updated package: `<project-name>-engspec-tested.zip`
 
 ---
 
 ## Key Principles
 
-1. **The Judge never sees source.** Even when Red and Blue have source access, the Judge evaluates purely against the spec. If the spec is ambiguous enough that the Judge can't rule, that's a SpecGap — even if the source code handles it correctly. The spec must stand on its own.
+1. **Two Judges, two questions.** Blind tests self-containment, Sighted tests accuracy. Disagreements are highest-value findings.
+2. **Concrete over abstract.** Every challenge needs a specific scenario, not "this might be ambiguous."
+3. **Fix specs immediately.** Don't batch — fix after each round so subsequent rounds debate the improved spec.
+4. **Don't repeat yourself.** Review all prior findings before each Red round.
+5. **Composition is where gaps hide.** Cross-function precondition/postcondition mismatches are invisible in isolation.
+6. **Reimplementation is the primary attack.** If two reasonable implementations from the spec would differ, it's a SpecGap.
+7. **Source access amplifies Red.** Undocumented behavior and missing error paths are the findings that most improve spec quality.
+8. **Severity matters.** One critical finding outweighs five minor cosmetic issues.
+9. **"Currently works" is not a defense.** Zero-margin boundaries warrant minimum `major`. "It works in production" is irrelevant — specs must handle all valid inputs.
 
-2. **Concrete over abstract.** Every Red challenge must have a specific scenario. "This might be ambiguous" is not a challenge. "Input `HTTP://Example.COM/../foo` would produce different output under WHATWG vs RFC 3986 normalization" is.
+---
 
-3. **Fix specs immediately.** Don't accumulate SpecGap findings for a batch update. Fix them after each round so subsequent rounds debate against the improved spec.
+## Operational Requirements
 
-4. **Don't repeat yourself.** Review all prior findings before each Red round. Repeating a finding wastes a round toward the convergence cap.
+This workflow requires the most capable available model for all agents and sub-agents. Spec quality degrades significantly with smaller or faster models.
 
-5. **Composition is where gaps hide.** The most valuable challenges are composition gaps — where function A's postconditions don't satisfy function B's preconditions. These are invisible when looking at functions in isolation.
-
-6. **Reimplementation is the primary attack.** Red's strongest tool is reimplementing a function from spec alone and showing where two reasonable implementations would diverge. If the spec allows divergence, it's a SpecGap.
-
-7. **Source access amplifies Red.** When source is available, Red can compare spec against actual implementation to find undocumented behavior, missing error paths, and third-party API details not captured in the spec. These are the findings that most improve spec quality.
-
-8. **Severity matters.** A critical finding that would cause incorrect regeneration is worth more than five minor cosmetic issues. Prioritize accordingly.
+When using Claude Code, pass `model: "opus"` for ALL agent invocations. Do not use Sonnet or Haiku for any agent in this workflow.

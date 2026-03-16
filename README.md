@@ -8,7 +8,7 @@ engspec captures this as structured English. Every function gets a specification
 
 Convert any codebase to `.engspec` files. Let adversarial AI agents debate every edge case, error path, and parameter contract. Give high-level guidance in plain English — "this implements SO(3)-equivariant message passing, not SE(3)" — and the agents handle implementation, testing, and validation. You steer at the level of mathematical intent; they work out the details.
 
-No installation required. Three self-contained markdown prompts — give them to Claude and go.
+No installation required. Three markdown prompts and one shared format spec — give them to Claude and go.
 
 ## The Pipeline
 
@@ -22,26 +22,31 @@ engspec_to_code_prompt.md  →  engspec → code (regenerates codebase from spec
 
 ### 1. `engspec_prompt.md` — Code → Engspec
 
-Analyzes a codebase and produces validated `.engspec` files for every source and test file. Validates each spec by reimplementing from spec alone 3 times.
+Analyzes a codebase and produces validated `.engspec` files. Supports full, partial (subset of files), and incremental (update changed files only) modes. Validates each spec by reimplementing from spec alone 3 times.
 
-**Example — from a git URL:**
-
-```
-Read /path/to/engspec_prompt.md for your instructions.
-
-Please clone https://github.com/encode/httpx, analyze the repo, and produce validated .engspec files for all source files.
-
-No input.md is provided — auto-generate the project context from the repo.
-```
-
-**Example — from a local repo:**
+**Example — full repo:**
 
 ```
 Read /path/to/engspec_prompt.md for your instructions.
-
 Here is my repo at /home/ubuntu/my-project
-
 Please produce validated .engspec files for all source files.
+```
+
+**Example — partial (specific files):**
+
+```
+Read /path/to/engspec_prompt.md for your instructions.
+Here is my repo at /home/ubuntu/my-project
+Please produce .engspec files for only: src/parser.py, src/lexer.py
+```
+
+**Example — incremental update:**
+
+```
+Read /path/to/engspec_prompt.md for your instructions.
+Here is my repo at /home/ubuntu/my-project
+Here is the existing engspec package at: /home/ubuntu/my-project-engspec/
+Please update specs for files that have changed.
 ```
 
 **Output:** `project-engspec.zip` containing `.engspec` files, project context, call graph, test coverage analysis, non-code files (configs, docs, assets), and a manifest.
@@ -50,7 +55,7 @@ Please produce validated .engspec files for all source files.
 
 ### 2. `engspec_tester_prompt.md` — Adversarial Debate
 
-Runs Red/Blue/Judge debate on `.engspec` files to find spec gaps, ambiguities, and contradictions. The Judge never sees source code — if the spec is too ambiguous to rule on, that's a finding.
+Runs Red/Blue debate with a two-Judge system on `.engspec` files to find spec gaps, ambiguities, and contradictions. The Blind Judge rules from spec only (tests self-containment); the Sighted Judge rules with source access (tests accuracy). Disagreements between them are the highest-value findings.
 
 **Example — spec + source (recommended):**
 
@@ -81,14 +86,21 @@ Please run adversarial analysis.
 
 Regenerates a full working codebase from an `.engspec` package. Installs dependencies first (so third-party APIs can be introspected), regenerates in dependency order, then runs tests.
 
-**Example:**
+**Example — full package:**
 
 ```
 Read /path/to/engspec_to_code_prompt.md for your instructions.
-
 Here is the engspec package: /home/ubuntu/httpx-engspec.zip
-
 Please regenerate the full codebase into /home/ubuntu/httpx-regen/ and run tests.
+```
+
+**Example — partial package (regenerate into existing codebase):**
+
+```
+Read /path/to/engspec_to_code_prompt.md for your instructions.
+Here is the engspec package: /home/ubuntu/httpx-engspec/
+Here is the existing codebase at: /home/ubuntu/httpx/
+Please regenerate only the spec'd files into the existing codebase.
 ```
 
 **Output:** Complete working codebase + test results + validation report listing any spec gaps found during regeneration.
@@ -97,44 +109,30 @@ Please regenerate the full codebase into /home/ubuntu/httpx-regen/ and run tests
 
 ## The .engspec Format
 
+The full format specification is in `engspec_format.md`. Here's the structure at a glance:
+
 ```markdown
 <!-- engspec v1 -->
 <!-- source: src/main.py -->
 <!-- language: python -->
 <!-- model: claude-opus-4-6 -->
 <!-- status: validated -->
+<!-- source_commit: a1b2c3d4... -->
 <!-- regeneration_count: 7 -->
 <!-- regeneration_pass_rate: 3/3 -->
 
 ## `function_name(param1: Type, param2: Type) -> ReturnType`
+<!-- checksum: 9f86d081884c... -->
+<!-- audited: 2026-03-15T14:00:00Z -->
 
 ### Purpose
 What and why, not how.
 
-### Context
-- Called by: caller()
-- Calls: callee()
-- Test coverage: tested in test_main.py
+### Context / Preconditions / Postconditions / Invariants
+### Implementation Notes / Failure Modes / Test Strategy
 
-### Preconditions
-- param1 must be non-negative
-
-### Postconditions
-- Returns a non-empty list
-- Input is not modified
-
-### Invariants
-- Pure function, deterministic
-
-### Implementation Notes
-- Uses binary search, O(log n)
-
-### Failure Modes
-- Raises ValueError if param1 < 0: **propagated** to caller
-
-### Test Strategy
-- Property: output is sorted for random inputs
-- Edge: empty input returns empty output
+### Debate Log  (added by engspec_tester only)
+| Round | Finding | Blind | Sighted | Tag | Severity | Action |
 ```
 
 ### Key features
@@ -146,6 +144,8 @@ What and why, not how.
 - **Error semantics** — every error labeled **recovered** or **propagated** with exact error type
 - **Test specs** — test files get `.engspec` too, with assertion code blocks in Postconditions
 - **Negative boundaries** — what the function does NOT implement is as important as what it does
+- **Per-function versioning** — MD5 checksums detect spec drift; `source_commit` tracks which source version the spec was written against
+- **Two-Judge adversarial debate** — Blind Judge (spec only) and Sighted Judge (spec + source) catch both ambiguity and silent divergence
 
 ## Validation
 
@@ -161,6 +161,7 @@ Specs are validated through regeneration: re-implement each function from the sp
 
 ```
 engspec_code/
+├── engspec_format.md              # shared format specification (v1.0)
 ├── engspec_prompt.md              # code → engspec
 ├── engspec_to_code_prompt.md      # engspec → code
 ├── engspec_tester_prompt.md       # adversarial debate
