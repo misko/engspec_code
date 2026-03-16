@@ -10,6 +10,35 @@ Convert any codebase to `.engspec` files. Let adversarial AI agents debate every
 
 No installation required. Three markdown prompts and one shared format spec — give them to Claude and go.
 
+## Quick Start (Claude Code)
+
+If you're using Claude Code, the repo includes slash commands:
+
+```bash
+# Spec an entire repo
+/engspec /home/ubuntu/my-project
+
+# Spec specific files only
+/engspec /home/ubuntu/my-project src/parser.py src/lexer.py
+
+# Update specs for changed files
+/engspec /home/ubuntu/my-project --incremental /home/ubuntu/my-project-engspec/
+
+# Run adversarial debate on specs
+/engspec-test /home/ubuntu/my-project-engspec /home/ubuntu/my-project
+
+# Spec-only mode (no source)
+/engspec-test /home/ubuntu/my-project-engspec
+
+# Regenerate code from specs
+/engspec-regen /home/ubuntu/my-project-engspec.zip
+
+# Regenerate partial package into existing codebase
+/engspec-regen /home/ubuntu/my-project-engspec /home/ubuntu/my-project
+```
+
+Not using Claude Code? See the [Prompts](#prompts) section below for manual usage.
+
 ## The Pipeline
 
 ```
