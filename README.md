@@ -51,6 +51,76 @@ engspec_to_code_prompt.md        →  engspec → code (regenerates codebase fro
 
 Tracing is the cheapest validator: it runs **before** adversarial debate and **before** any code exists, and its UNCLEAR verdict names the exact spec section that needs strengthening. A PASS trace proves that the test engspec's assertion can be derived from the impl engspec alone — that any correct implementation of the spec would pass the test.
 
+## Building from scratch: idea → running code
+
+The full methodology is a loop from an English idea to validated, tested code. Each arrow below is an artifact handoff; each stage's failure mode tells you which earlier stage to iterate on.
+
+```
+idea  →  plan  →  test engspecs  →  revise plan  →  impl engspecs  →  trace + pytest  →  iterate
+```
+
+A worked example of every stage lives under [`tests/json_pointer/`](tests/json_pointer/) — RFC 6901 JSON Pointer resolver, 25/25 generated tests passing.
+
+### 1. Idea
+
+Write one page describing what you want: public API shape, what's in scope, what's out of scope. Reference external specs by name (RFCs, standards) rather than paraphrasing them. See [`tests/json_pointer/idea.md`](tests/json_pointer/idea.md).
+
+**Artifact:** `idea.md`. **No dedicated prompt** — the idea is human input.
+
+### 2. Plan
+
+A regular Claude session consumes the idea and produces a plan: module layout, function signatures, test strategy, edge cases, ambiguities flagged for human resolution. Review it. Amend before continuing.
+
+**Artifact:** `plan.md`. **No dedicated prompt** yet — use a normal session.
+
+### 3. Test engspecs
+
+Using [`engspec_prompt.md`](engspec_prompt.md), produce `.engspec` files for the test suite *before* writing implementation code. Every assertion is a verbatim code block in Postconditions. Validated by 3 consecutive regenerations from spec alone producing byte-equivalent assertions.
+
+Source code does not exist yet — this is deliberate. Writing tests first surfaces design decisions that would otherwise hide in the implementation.
+
+**Artifact:** `tests/*.engspec` files with `<!-- status: validated -->`.
+
+### 4. Revise plan
+
+Writing the test specs almost always surfaces edge cases the plan did not name — error types, ordering decisions, fixture locations, base-class catch behavior. Re-read the plan against the test specs and produce a revision with an explicit "Changes from v1" section. If nothing changed, either your plan was exceptional or stage 3 was not rigorous — both are worth noticing.
+
+**Artifact:** `plan.v2.md`.
+
+### 5. Impl engspecs
+
+Using [`engspec_prompt.md`](engspec_prompt.md) again, against the revised plan + test engspecs, produce `.engspec` files for the source code. Every assertion in the test engspecs must map to a postcondition or failure mode in some impl engspec — build a coverage table in the revised plan to check this. Validated by 3/3 regeneration.
+
+**Artifact:** `src/*.engspec` files.
+
+### 6. Trace + pytest
+
+Two validators run at this stage, cheap-to-expensive:
+
+- **Trace each test.** Using [`engspec_trace_prompt.md`](engspec_trace_prompt.md), produce one `.trace.md` per test function — deriving PASS, FAIL, or UNCLEAR from the specs alone, no code executed. Using [`engspec_verify_trace_prompt.md`](engspec_verify_trace_prompt.md), a second Claude proof-checks each trace into TRACE_VALID. **Most iteration happens here.** An UNCLEAR verdict names the exact impl-spec section that needs strengthening. A FAIL names a test/spec disagreement.
+
+- **Regenerate and run.** Using [`engspec_to_code_prompt.md`](engspec_to_code_prompt.md), produce source + test files + build config from the spec package. Run the tests. Every pass is expected — tracing already predicted it. Any failure is a real methodology finding: tracing said PASS, runtime said otherwise → the impl spec has a gap tracing did not catch.
+
+**Artifacts:** `traces/*.trace.md` and a regenerated codebase that passes its own tests.
+
+### 7. (Optional) Adversarial debate
+
+Using [`engspec_tester_prompt.md`](engspec_tester_prompt.md), run Red/Blue/Judge debate over the package. Findings on a traced-clean package are the highest-signal you get — the gaps every cheap validator missed. Apply the findings, re-trace, re-regen.
+
+### Iterate — which stage to revisit when something fails
+
+| Failure | Iterate at |
+|---|---|
+| Stage 3 test spec does not converge to 3/3 regeneration | Stage 3 — test spec is ambiguous; add verbatim code blocks, tighten preconditions |
+| Stage 5 impl spec does not converge to 3/3 regeneration | Stage 5 — two reasonable reimplementations differ; name the missing detail in Implementation Notes |
+| Stage 6 trace verdict UNCLEAR | Stage 5 — impl spec has a named gap; fix the cited section, re-trace |
+| Stage 6 trace verdict FAIL | Stage 3 or 5 — test and impl spec disagree; trace names both options, pick one |
+| Stage 6 verifier rules TRACE_INVALID | Stage 6 — regenerate the trace with a fresh agent |
+| Stage 6 pytest fails after all traces PASS | Stage 5 — spec gap that tracing missed (rare, most valuable finding); record as a methodology finding |
+| Stage 7 adversarial finding | Stage 3 or 5 per the finding's target |
+
+The whole methodology is leverage from moving discovery earlier. A spec gap caught at stage 6 costs one edit. The same gap caught at stage 7's pytest costs an edit plus a full regeneration plus a test re-run. The same gap caught in production costs whatever it broke.
+
 ## Prompts
 
 ### 1. `engspec_prompt.md` — Code → Engspec
