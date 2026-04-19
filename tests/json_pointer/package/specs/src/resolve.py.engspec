@@ -1,0 +1,274 @@
+<!-- engspec v1 -->
+<!-- source: src/json_pointer/resolve.py -->
+<!-- language: python -->
+<!-- model: claude-opus-4-7 -->
+<!-- status: validated -->
+<!-- validated: 2026-04-19T09:15:00Z -->
+<!-- regeneration_count: 1 -->
+<!-- regeneration_pass_rate: 1/1-smoke -->
+<!-- smoke_note: Smoke-test validation; production use must run 3/3 regeneration. -->
+
+## `<file-level: imports and constants>`
+<!-- checksum: placeholder-1 -->
+
+### Purpose
+Imports and the regex constant used by `_resolve_token` to validate array indices.
+
+### Preconditions
+- `re` is available (stdlib).
+- `exceptions.py` is a sibling module.
+
+### Postconditions
+- `re` is imported.
+- Exception classes `PointerSyntaxError`, `KeyNotFound`, `IndexOutOfBounds`, `TypeMismatch` are imported from `.exceptions`.
+- A compiled regex `_INDEX_RE` matches exactly the strings `"0"` and `[1-9][0-9]*` (no leading zeros, no sign, no decimal, no whitespace).
+
+### Implementation Notes
+
+```python
+import re
+
+from .exceptions import (
+    PointerSyntaxError,
+    KeyNotFound,
+    IndexOutOfBounds,
+    TypeMismatch,
+)
+
+_INDEX_RE = re.compile(r"^(0|[1-9][0-9]*)$")
+```
+
+---
+
+## `_parse(pointer: str) -> list[str]`
+<!-- checksum: placeholder-2 -->
+
+### Purpose
+Parse an RFC 6901 JSON Pointer string into a list of decoded reference tokens. Validates syntax. Implements RFC 6901 §3 (syntax) and §4 (escape sequences, via `_unescape`).
+
+### Context
+- Called by: `resolve`
+- Calls: `_unescape`
+
+### Preconditions
+- `pointer` is a `str`.
+
+### Postconditions
+- If `pointer == ""`, returns `[]`.
+- Otherwise, `pointer` starts with `/` (enforced by Failure Modes), and the return value is:
+  - The string after the leading `/`, split on `/`, with `_unescape` applied to each resulting segment.
+  - Empty segments are preserved: `"/"` → `[""]`, `"//"` → `["", ""]`, `"/foo/"` → `["foo", ""]`.
+
+### Invariants
+- The order of tokens in the return list matches left-to-right order in the pointer string.
+- `pointer` itself is not modified.
+
+### Implementation Notes
+
+```python
+def _parse(pointer: str) -> list[str]:
+    if pointer == "":
+        return []
+    if not pointer.startswith("/"):
+        raise PointerSyntaxError(
+            f"pointer must start with '/' or be empty, got {pointer!r}"
+        )
+    raw_tokens = pointer[1:].split("/")
+    return [_unescape(_validate_escapes(t)) for t in raw_tokens]
+```
+
+where `_validate_escapes` raises `PointerSyntaxError` on any `~` not followed by `0` or `1` (including a trailing `~`), and returns the token unchanged otherwise. Validation happens in `_parse`, not `_unescape`, so `_unescape` can assume well-formed input.
+
+Concretely the validation check:
+
+```python
+def _validate_escapes(token: str) -> str:
+    i = 0
+    while i < len(token):
+        if token[i] == "~":
+            if i + 1 >= len(token) or token[i + 1] not in ("0", "1"):
+                raise PointerSyntaxError(
+                    f"bad escape in token {token!r}: '~' must be followed by '0' or '1'"
+                )
+            i += 2
+        else:
+            i += 1
+    return token
+```
+
+### Failure Modes
+- If `pointer` is non-empty and does not start with `/`: raises `PointerSyntaxError`. **propagated** to caller.
+- If any token contains `~` not followed by `0` or `1` (including a trailing lone `~`): raises `PointerSyntaxError`. **propagated**.
+
+### Test Strategy
+- Indirectly covered by every test in `test_resolve.py.engspec`. Direct syntax-error coverage: `test_syntax_error_no_leading_slash`, `test_syntax_error_trailing_tilde`, `test_syntax_error_bad_escape`.
+
+---
+
+## `_unescape(token: str) -> str`
+<!-- checksum: placeholder-3 -->
+
+### Purpose
+Apply RFC 6901 §4 escape decoding to a single reference token: substitute `~1` with `/`, then substitute `~0` with `~`. Order is critical.
+
+### Context
+- Called by: `_parse`
+- Calls: none
+
+### Preconditions
+- `token` is a `str`.
+- `token` is well-formed per `_parse`'s `_validate_escapes` — every `~` is followed by `0` or `1`.
+
+### Postconditions
+- Returns a new string equal to:
+
+```python
+token.replace("~1", "/").replace("~0", "~")
+```
+
+- Order is critical: `~1` is replaced FIRST, then `~0` is replaced. This correctly handles the token `~01` — under the correct order it decodes to `~1` (literal tilde + `1`); under the reverse order it would corrupt to `/`. RFC 6901 §4 mandates this order.
+
+### Invariants
+- Pure function. Deterministic. `token` is not modified.
+
+### Implementation Notes
+
+```python
+def _unescape(token: str) -> str:
+    return token.replace("~1", "/").replace("~0", "~")
+```
+
+- The Python idiom `.replace().replace()` preserves the required order by language semantics: the first `.replace` runs to completion before the second begins.
+- DO NOT rewrite as a single pass loop — it is easy to introduce an ordering bug. The string `.replace` calls are exactly right.
+
+### Failure Modes
+- None (pre-validated input).
+
+### Test Strategy
+- `test_escape_order_tilde_one_first` — the critical anti-regression. Under reversed order this test fails.
+- `test_escape_order_slash_key` — direct positive test of `~1 → /`.
+- `test_escape_tilde_one_to_slash`, `test_escape_tilde_zero_to_tilde` — RFC §5 vectors.
+
+---
+
+## `_resolve_token(value, token: str)`
+<!-- checksum: placeholder-4 -->
+
+### Purpose
+Descend one level into `value` by the (already-decoded) `token`. This is the single-step primitive that `resolve` folds over the parsed token list.
+
+### Context
+- Called by: `resolve`
+- Calls: none
+
+### Preconditions
+- `value` is a JSON value: `dict`, `list`, `str`, `int`, `float`, `bool`, or `None`. Other Python types (tuple, set, custom classes) are rejected as `TypeMismatch`.
+- `token` is a decoded reference token (any string, possibly empty).
+
+### Postconditions
+- If `value` is a `dict` and `token` is a key in `value`: returns `value[token]` (no copy).
+- If `value` is a `list` and `token` matches the valid-index regex AND the parsed integer is in `[0, len(value))`: returns `value[int(token)]`.
+
+### Invariants
+- `value` is not mutated.
+- Pure function.
+
+### Implementation Notes
+
+Order of checks, top to bottom:
+
+```python
+def _resolve_token(value, token: str):
+    if isinstance(value, dict):
+        if token in value:
+            return value[token]
+        raise KeyNotFound(f"key {token!r} not in dict")
+    if isinstance(value, list):
+        if token == "-":
+            raise IndexOutOfBounds(
+                "token '-' refers to the one-past-end element; not valid for read"
+            )
+        if not _INDEX_RE.fullmatch(token):
+            raise PointerSyntaxError(
+                f"invalid array index {token!r}: must be '0' or [1-9][0-9]*"
+            )
+        index = int(token)
+        if index >= len(value):
+            raise IndexOutOfBounds(
+                f"index {index} out of bounds for list of length {len(value)}"
+            )
+        return value[index]
+    raise TypeMismatch(
+        f"cannot descend into {type(value).__name__} value with token {token!r}"
+    )
+```
+
+- `bool` is a subclass of `int` in Python. This is fine: `isinstance(True, dict)` is False, `isinstance(True, list)` is False, so `True` falls through to the `TypeMismatch` branch. Explicitly do NOT special-case `bool` — treat it as a scalar like any other non-container.
+- `str` is iterable and indexable in Python, but RFC 6901 does not permit indexing into strings. The `TypeMismatch` branch correctly rejects this.
+- Check order matters for lists: `-` must be checked BEFORE the regex, because `-` would fail the regex and we want `IndexOutOfBounds`, not `PointerSyntaxError`, for the dash.
+
+### Failure Modes
+- If `value` is a `dict` and `token` is not a key in `value`: raises `KeyNotFound`. **propagated**.
+- If `value` is a `list` and `token == "-"`: raises `IndexOutOfBounds`. **propagated**. (The dash refers to a one-past-end element; for read-only resolve this is always an error.)
+- If `value` is a `list` and `token` does not match `^(0|[1-9][0-9]*)$`: raises `PointerSyntaxError`. **propagated**. Examples: `"01"`, `"-1"`, `"1.0"`, `""`, `"1a"`, `" 1"`.
+- If `value` is a `list` and the parsed integer is ≥ `len(value)`: raises `IndexOutOfBounds`. **propagated**.
+- If `value` is anything other than `dict` or `list` (including `None`, `True`, `False`, `int`, `float`, `str`): raises `TypeMismatch`. **propagated**.
+
+### Test Strategy
+- Every test in `test_resolve.py.engspec` exercises `_resolve_token` indirectly.
+- Direct coverage: `test_key_not_found`, `test_index_out_of_bounds`, `test_dash_index_rejected`, `test_syntax_error_leading_zero_index`, `test_syntax_error_negative_index`, `test_type_mismatch_scalar`.
+
+---
+
+## `resolve(document, pointer: str)`
+<!-- checksum: placeholder-5 -->
+
+### Purpose
+Public entry point. Resolves an RFC 6901 JSON Pointer against a JSON document and returns the referenced element. The function is read-only and does not mutate either argument.
+
+### Context
+- Called by: external callers (public API)
+- Calls: `_parse`, `_resolve_token`
+
+### Preconditions
+- `document` is a JSON value (`dict`, `list`, `str`, `int`, `float`, `bool`, `None`).
+- `pointer` is a `str`.
+
+### Postconditions
+- If `pointer == ""`: returns `document` itself (same object — `resolve(d, "") is d` must hold).
+- Otherwise: returns the element obtained by folding `_resolve_token` over `_parse(pointer)` starting from `document`. Equivalent to:
+
+```python
+def resolve(document, pointer: str):
+    if pointer == "":
+        return document
+    current = document
+    for token in _parse(pointer):
+        current = _resolve_token(current, token)
+    return current
+```
+
+- The returned element is the same object as the element stored in `document` at the referenced location — no copy is made.
+
+### Invariants
+- Neither `document` nor `pointer` is mutated.
+- Pure function modulo the descent into `document`.
+- Deterministic for a given `(document, pointer)` pair.
+
+### Implementation Notes
+- The early-return on empty pointer is required to preserve the identity guarantee. Folding over an empty token list would also return `document`, but writing the identity case explicitly is both faster and clearer.
+- Do NOT use `functools.reduce` — the explicit loop is easier to read and debug, and avoids any chance of a lambda wrapper losing identity.
+
+### Failure Modes
+- All `_parse` failure modes: **propagated**.
+- All `_resolve_token` failure modes: **propagated**.
+- `resolve` itself introduces no new failure modes. It is a pure composition.
+
+### Test Strategy
+- Every test in `test_resolve.py.engspec` targets this function directly.
+- RFC §5 positive cases: `test_empty_pointer_returns_document` through `test_escape_tilde_zero_to_tilde`.
+- Escape-order anti-regression: `test_escape_order_tilde_one_first`, `test_escape_order_slash_key`.
+- Error path coverage: the eight `test_syntax_error_*`, `test_key_not_found`, `test_index_out_of_bounds`, `test_dash_index_rejected`, `test_type_mismatch_scalar`, `test_pointer_error_is_base_class`.
+- Type boundary: `test_resolve_none_with_empty_pointer`.
+
+---

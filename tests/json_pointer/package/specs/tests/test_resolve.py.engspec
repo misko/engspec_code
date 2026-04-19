@@ -1,0 +1,434 @@
+<!-- engspec v1 -->
+<!-- source: tests/test_resolve.py -->
+<!-- language: python -->
+<!-- model: claude-opus-4-7 -->
+<!-- status: validated -->
+<!-- validated: 2026-04-19T09:00:00Z -->
+<!-- regeneration_count: 1 -->
+<!-- regeneration_pass_rate: 1/1-smoke -->
+<!-- smoke_note: For the end-to-end smoke test, regeneration validation was spot-checked rather than fully run 3/3. Production use of engspec_prompt.md must achieve 3/3 consecutive passes. -->
+
+## `<file-level: imports>`
+<!-- checksum: placeholder-1 -->
+
+### Purpose
+Imports and fixtures shared across every test in this file.
+
+### Postconditions
+- `pytest` is available.
+- `resolve` and the five exception classes are importable from the `json_pointer` package.
+- A fixture `rfc_doc` yields the RFC 6901 §5 example document.
+
+### Implementation Notes
+
+```python
+import pytest
+from json_pointer import (
+    resolve,
+    PointerError,
+    PointerSyntaxError,
+    KeyNotFound,
+    IndexOutOfBounds,
+    TypeMismatch,
+)
+
+
+@pytest.fixture
+def rfc_doc():
+    return {
+        "foo": ["bar", "baz"],
+        "": 0,
+        "a/b": 1,
+        "c%d": 2,
+        "e^f": 3,
+        "g|h": 4,
+        "i\\j": 5,
+        "k\"l": 6,
+        " ": 7,
+        "m~n": 8,
+    }
+```
+
+---
+
+## `test_empty_pointer_returns_document(rfc_doc)`
+<!-- checksum: placeholder-2 -->
+
+### Purpose
+RFC 6901 §5: the empty pointer refers to the whole document. Verifies *identity*, not value equality — `resolve(doc, "") is doc` must hold.
+
+### Context
+- Tests: `json_pointer.resolve.resolve`
+- Test coverage: RFC 6901 §5 vector 1 (`""`)
+
+### Postconditions
+
+```python
+assert resolve(rfc_doc, "") is rfc_doc
+```
+
+### Invariants
+- `rfc_doc` is not modified.
+
+---
+
+## `test_foo_returns_list(rfc_doc)`
+<!-- checksum: placeholder-3 -->
+
+### Purpose
+RFC 6901 §5 vector 2: `/foo` resolves to the value at key `"foo"`, which is a list.
+
+### Context
+- Tests: `json_pointer.resolve.resolve`
+
+### Postconditions
+
+```python
+assert resolve(rfc_doc, "/foo") == ["bar", "baz"]
+```
+
+---
+
+## `test_foo_0_returns_bar(rfc_doc)`
+<!-- checksum: placeholder-4 -->
+
+### Purpose
+RFC 6901 §5 vector 3: `/foo/0` resolves to the 0th element of the list at key `"foo"`.
+
+### Postconditions
+
+```python
+assert resolve(rfc_doc, "/foo/0") == "bar"
+```
+
+---
+
+## `test_slash_returns_value_at_empty_key(rfc_doc)`
+<!-- checksum: placeholder-5 -->
+
+### Purpose
+RFC 6901 §5 vector 4: `/` (one slash) is *not* the whole document — it is a pointer with a single empty-string token, resolving to `doc[""]`.
+
+### Postconditions
+
+```python
+assert resolve(rfc_doc, "/") == 0
+```
+
+---
+
+## `test_escape_tilde_one_to_slash(rfc_doc)`
+<!-- checksum: placeholder-6 -->
+
+### Purpose
+RFC 6901 §5 vector 5: `/a~1b` decodes to the key `"a/b"` via the `~1` → `/` escape.
+
+### Postconditions
+
+```python
+assert resolve(rfc_doc, "/a~1b") == 1
+```
+
+---
+
+## `test_percent_in_key(rfc_doc)`
+<!-- checksum: placeholder-7 -->
+
+### Purpose
+RFC 6901 §5 vector 6: `%` needs no escaping in a string-form pointer (unlike the URI fragment form).
+
+### Postconditions
+
+```python
+assert resolve(rfc_doc, "/c%d") == 2
+```
+
+---
+
+## `test_caret_in_key(rfc_doc)`
+<!-- checksum: placeholder-8 -->
+
+### Purpose
+RFC 6901 §5 vector 7: `^` needs no escaping in a string-form pointer.
+
+### Postconditions
+
+```python
+assert resolve(rfc_doc, "/e^f") == 3
+```
+
+---
+
+## `test_pipe_in_key(rfc_doc)`
+<!-- checksum: placeholder-9 -->
+
+### Purpose
+RFC 6901 §5 vector 8: `|` needs no escaping.
+
+### Postconditions
+
+```python
+assert resolve(rfc_doc, "/g|h") == 4
+```
+
+---
+
+## `test_backslash_in_key(rfc_doc)`
+<!-- checksum: placeholder-10 -->
+
+### Purpose
+RFC 6901 §5 vector 9: backslash needs no escaping in the pointer. The key in the document is the two-character string `i\\j` (Python-literal); the pointer string is `/i\\j`.
+
+### Postconditions
+
+```python
+assert resolve(rfc_doc, "/i\\j") == 5
+```
+
+---
+
+## `test_doublequote_in_key(rfc_doc)`
+<!-- checksum: placeholder-11 -->
+
+### Purpose
+RFC 6901 §5 vector 10: double-quote needs no escaping in the pointer.
+
+### Postconditions
+
+```python
+assert resolve(rfc_doc, "/k\"l") == 6
+```
+
+---
+
+## `test_space_key(rfc_doc)`
+<!-- checksum: placeholder-12 -->
+
+### Purpose
+RFC 6901 §5 vector 11: whitespace in a key is significant and not stripped. `/ ` is a pointer with one token of length 1 (a single space).
+
+### Postconditions
+
+```python
+assert resolve(rfc_doc, "/ ") == 7
+```
+
+---
+
+## `test_escape_tilde_zero_to_tilde(rfc_doc)`
+<!-- checksum: placeholder-13 -->
+
+### Purpose
+RFC 6901 §5 vector 12: `/m~0n` decodes to the key `"m~n"` via the `~0` → `~` escape.
+
+### Postconditions
+
+```python
+assert resolve(rfc_doc, "/m~0n") == 8
+```
+
+---
+
+## `test_escape_order_tilde_one_first()`
+<!-- checksum: placeholder-14 -->
+
+### Purpose
+Anti-regression for escape order. Per RFC 6901 §4, `~1` must be decoded before `~0`. Reversed order would mis-decode `~01` as `~1` → `/`, instead of as the literal two-character token `~1`. This test would silently pass under the wrong order if we only had the RFC §5 vectors.
+
+### Context
+- Tests: `json_pointer.resolve._unescape` (via `resolve`)
+
+### Postconditions
+
+```python
+assert resolve({"~1": "kept-as-tilde-one"}, "/~01") == "kept-as-tilde-one"
+```
+
+---
+
+## `test_escape_order_slash_key()`
+<!-- checksum: placeholder-15 -->
+
+### Purpose
+Direct check: `~1` decodes to `/`, so `/~1` points at the key `"/"`.
+
+### Postconditions
+
+```python
+assert resolve({"/": "slash-key"}, "/~1") == "slash-key"
+```
+
+---
+
+## `test_syntax_error_no_leading_slash()`
+<!-- checksum: placeholder-16 -->
+
+### Purpose
+Per RFC 6901 §3, a non-empty JSON Pointer must begin with `/`. A pointer like `"foo"` is malformed.
+
+### Postconditions
+
+```python
+with pytest.raises(PointerSyntaxError):
+    resolve({"foo": 1}, "foo")
+```
+
+---
+
+## `test_syntax_error_trailing_tilde()`
+<!-- checksum: placeholder-17 -->
+
+### Purpose
+A bare `~` at end of a token is invalid — `~` must always be followed by `0` or `1`.
+
+### Postconditions
+
+```python
+with pytest.raises(PointerSyntaxError):
+    resolve({"a~": 1}, "/a~")
+```
+
+---
+
+## `test_syntax_error_bad_escape()`
+<!-- checksum: placeholder-18 -->
+
+### Purpose
+`~` followed by anything other than `0` or `1` is invalid. `~x` is a common mistake.
+
+### Postconditions
+
+```python
+with pytest.raises(PointerSyntaxError):
+    resolve({"a~b": 1}, "/a~b")
+```
+
+---
+
+## `test_syntax_error_leading_zero_index()`
+<!-- checksum: placeholder-19 -->
+
+### Purpose
+RFC 6901 §4: array indices are `0` or strings matching `[1-9][0-9]*`. `01` is not a valid index — the pointer is malformed, not "index out of bounds".
+
+### Postconditions
+
+```python
+with pytest.raises(PointerSyntaxError):
+    resolve({"a": [1, 2]}, "/a/01")
+```
+
+---
+
+## `test_syntax_error_negative_index()`
+<!-- checksum: placeholder-20 -->
+
+### Purpose
+Negative numbers are not valid array indices in RFC 6901. This is a syntax issue, not a bounds issue — the token is not even a well-formed index string.
+
+### Postconditions
+
+```python
+with pytest.raises(PointerSyntaxError):
+    resolve({"a": [1, 2]}, "/a/-1")
+```
+
+---
+
+## `test_key_not_found()`
+<!-- checksum: placeholder-21 -->
+
+### Purpose
+When a dict does not contain the referenced key, `KeyNotFound` is raised (not the stdlib `KeyError` directly, though our class may inherit from it).
+
+### Postconditions
+
+```python
+with pytest.raises(KeyNotFound):
+    resolve({"a": 1}, "/b")
+```
+
+---
+
+## `test_index_out_of_bounds()`
+<!-- checksum: placeholder-22 -->
+
+### Purpose
+List index `>= len(list)` raises `IndexOutOfBounds`. Here `/a/2` on a 2-element list.
+
+### Postconditions
+
+```python
+with pytest.raises(IndexOutOfBounds):
+    resolve({"a": [1, 2]}, "/a/2")
+```
+
+---
+
+## `test_dash_index_rejected()`
+<!-- checksum: placeholder-23 -->
+
+### Purpose
+Per RFC 6901 §4, `-` refers to the one-past-end insertion point. For read-only resolve, this is always `IndexOutOfBounds`. The syntax is valid, but there is no element to return.
+
+### Postconditions
+
+```python
+with pytest.raises(IndexOutOfBounds):
+    resolve({"a": [1, 2]}, "/a/-")
+```
+
+---
+
+## `test_type_mismatch_scalar()`
+<!-- checksum: placeholder-24 -->
+
+### Purpose
+Attempting to descend into a scalar (int, str, bool, None) is a type error, not a key error.
+
+### Postconditions
+
+```python
+with pytest.raises(TypeMismatch):
+    resolve({"a": 1}, "/a/x")
+```
+
+---
+
+## `test_resolve_none_with_empty_pointer()`
+<!-- checksum: placeholder-25 -->
+
+### Purpose
+The document itself may be `None` (JSON `null`). An empty pointer returns it unchanged.
+
+### Postconditions
+
+```python
+assert resolve(None, "") is None
+```
+
+---
+
+## `test_pointer_error_is_base_class()`
+<!-- checksum: placeholder-26 -->
+
+### Purpose
+All four specific error classes inherit from `PointerError`. This lets library consumers catch any pointer-related error with a single except clause.
+
+### Postconditions
+
+```python
+with pytest.raises(PointerError):
+    resolve({"a": 1}, "/b")
+
+with pytest.raises(PointerError):
+    resolve({"a": 1}, "foo")
+
+with pytest.raises(PointerError):
+    resolve({"a": [1, 2]}, "/a/5")
+
+with pytest.raises(PointerError):
+    resolve({"a": 1}, "/a/x")
+```
+
+---

@@ -1,0 +1,67 @@
+<!-- engspec v1 -->
+<!-- source: src/json_pointer/exceptions.py -->
+<!-- language: python -->
+<!-- model: claude-opus-4-7 -->
+<!-- status: validated -->
+<!-- validated: 2026-04-19T09:15:00Z -->
+<!-- regeneration_count: 1 -->
+<!-- regeneration_pass_rate: 1/1-smoke -->
+<!-- smoke_note: Smoke-test validation; production use must run 3/3 regeneration. -->
+
+## `<file-level: class hierarchy>`
+<!-- checksum: placeholder-1 -->
+
+### Purpose
+Defines the five exception classes that `json_pointer.resolve` can raise. The hierarchy is designed so that consumers can catch at any of three levels:
+- stdlib exception (`except KeyError`, `except IndexError`, `except TypeError`, `except ValueError`)
+- library-wide base (`except PointerError`)
+- specific subclass (`except KeyNotFound`)
+
+### Preconditions
+- Python ≥ 3.10.
+
+### Postconditions
+- `PointerError` is a subclass of `Exception` and of nothing else library-defined.
+- `PointerSyntaxError` is a subclass of both `PointerError` and `ValueError` (MRO: PointerSyntaxError → PointerError → Exception → ...  combined with ValueError).
+- `KeyNotFound` is a subclass of both `PointerError` and `KeyError`.
+- `IndexOutOfBounds` is a subclass of both `PointerError` and `IndexError`.
+- `TypeMismatch` is a subclass of both `PointerError` and `TypeError`.
+- All four specific classes, when instantiated and raised, are catchable as `PointerError`.
+- All four are catchable as their respective stdlib parent.
+
+### Invariants
+- No class has state beyond what `Exception.__init__` provides.
+- No class overrides `__init__`, `__str__`, or `__repr__`.
+
+### Implementation Notes
+
+```python
+class PointerError(Exception):
+    """Base class for all errors raised by json_pointer.resolve."""
+
+
+class PointerSyntaxError(PointerError, ValueError):
+    """Raised when a pointer string is not well-formed per RFC 6901."""
+
+
+class KeyNotFound(PointerError, KeyError):
+    """Raised when a reference token names a key not present in a dict."""
+
+
+class IndexOutOfBounds(PointerError, IndexError):
+    """Raised when a list index is >= len(list), or when the '-' token is
+    encountered (which refers to a nonexistent one-past-end element per
+    RFC 6901 §4)."""
+
+
+class TypeMismatch(PointerError, TypeError):
+    """Raised when a reference token is applied to a non-container value."""
+```
+
+### Failure Modes
+- None (these are definitions only; they raise nothing themselves).
+
+### Test Strategy
+- Covered by `test_pointer_error_is_base_class` in the test engspec, which exercises all four subclasses through the base.
+
+---

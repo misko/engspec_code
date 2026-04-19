@@ -1,0 +1,44 @@
+<!-- engspec v1 -->
+<!-- source: src/json_pointer/__init__.py -->
+<!-- language: python -->
+<!-- model: claude-opus-4-7 -->
+<!-- status: validated -->
+<!-- validated: 2026-04-19T09:15:00Z -->
+<!-- regeneration_count: 1 -->
+<!-- regeneration_pass_rate: 1/1-smoke -->
+<!-- smoke_note: Smoke-test validation; production use must run 3/3 regeneration. -->
+
+## `<file-level: public API>`
+<!-- checksum: placeholder-1 -->
+
+### Purpose
+Re-exports the public API of the `json_pointer` package: the `resolve` function and the five exception classes. Importers should never need to import from `json_pointer.resolve` or `json_pointer.exceptions` directly.
+
+### Postconditions
+- `from json_pointer import resolve` works.
+- `from json_pointer import PointerError, PointerSyntaxError, KeyNotFound, IndexOutOfBounds, TypeMismatch` all work.
+- `json_pointer.__all__` names exactly these six identifiers.
+
+### Implementation Notes
+
+```python
+from .resolve import resolve
+from .exceptions import (
+    PointerError,
+    PointerSyntaxError,
+    KeyNotFound,
+    IndexOutOfBounds,
+    TypeMismatch,
+)
+
+__all__ = [
+    "resolve",
+    "PointerError",
+    "PointerSyntaxError",
+    "KeyNotFound",
+    "IndexOutOfBounds",
+    "TypeMismatch",
+]
+```
+
+---

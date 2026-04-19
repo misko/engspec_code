@@ -42,10 +42,14 @@ Not using Claude Code? See the [Prompts](#prompts) section below for manual usag
 ## The Pipeline
 
 ```
-engspec_prompt.md          →  code → engspec (produces project-engspec.zip)
-engspec_tester_prompt.md   →  adversarial debate (strengthens specs)
-engspec_to_code_prompt.md  →  engspec → code (regenerates codebase from specs)
+engspec_prompt.md                →  code → engspec (produces project-engspec.zip)
+engspec_trace_prompt.md          →  (test + impl engspecs) → PASS/FAIL/UNCLEAR trace
+engspec_verify_trace_prompt.md   →  trace → TRACE_VALID / TRACE_INVALID / TRACE_STALE
+engspec_tester_prompt.md         →  adversarial debate (strengthens specs)
+engspec_to_code_prompt.md        →  engspec → code (regenerates codebase from specs)
 ```
+
+Tracing is the cheapest validator: it runs **before** adversarial debate and **before** any code exists, and its UNCLEAR verdict names the exact spec section that needs strengthening. A PASS trace proves that the test engspec's assertion can be derived from the impl engspec alone — that any correct implementation of the spec would pass the test.
 
 ## Prompts
 
@@ -108,6 +112,50 @@ Please run adversarial analysis.
 ```
 
 **Output:** Updated `.engspec` files with Debate Log entries and fixes, analysis report with findings and confidence scores.
+
+---
+
+### 2a. `engspec_trace_prompt.md` — Evaluate a Test Engspec from Spec Alone
+
+Generates a `.trace.md` that derives **PASS**, **FAIL**, or **UNCLEAR** for a single test engspec function, using only the test engspec and its cited impl engspec(s). No code is executed. The trace is a mechanical derivation — every step cites a specific spec bullet, every intermediate value is named in a `## State` table, and the verdict follows strictly from whether all steps are derivable and all assertions hold.
+
+**Example:**
+
+```
+Read /path/to/engspec_trace_prompt.md for your instructions.
+Read /path/to/engspec_trace_format.md for the trace format.
+
+Test engspec: /path/to/tests/test_resolve.py.engspec
+Test function: test_root_pointer
+Impl engspec: /path/to/src/resolve.py.engspec
+
+Please produce a trace.
+```
+
+**Output:** `{test_spec_dir}/traces/{test_function}.trace.md`. Verdict is one of PASS (spec sufficient for this assertion), FAIL (test and spec disagree), or UNCLEAR (spec has a gap).
+
+**When to use it:** after the impl engspec is written but before adversarial debate. An UNCLEAR verdict names the cheapest kind of spec gap — something missing before any code exists. A FAIL verdict names a test/spec disagreement that must be resolved before proceeding.
+
+---
+
+### 2b. `engspec_verify_trace_prompt.md` — Verify a Trace
+
+Reads an existing `.trace.md` and checks that each step is locally sound given the cited engspecs: citations resolve, state references are bound before use, the verdict matches the assertion evaluation table. Appends a `## Verification` section with **TRACE_VALID**, **TRACE_INVALID**, or **TRACE_STALE**.
+
+Separating verification from generation matters: the verifier produces its ruling without having committed to an answer, making TRACE_VALID a meaningful signature.
+
+**Example:**
+
+```
+Read /path/to/engspec_verify_trace_prompt.md for your instructions.
+Read /path/to/engspec_trace_format.md for the trace format.
+
+Trace file: /path/to/tests/test_resolve.py.engspec/traces/test_root_pointer.trace.md
+
+Please verify this trace.
+```
+
+**Output:** the same trace file with a `## Verification` block appended (excluded from the trace's checksum, so re-verification is safe).
 
 ---
 
@@ -190,9 +238,22 @@ Specs are validated through regeneration: re-implement each function from the sp
 
 ```
 engspec_code/
-├── engspec_format.md              # shared format specification (v1.0)
-├── engspec_prompt.md              # code → engspec
-├── engspec_to_code_prompt.md      # engspec → code
-├── engspec_tester_prompt.md       # adversarial debate
+├── engspec_format.md                  # shared format for .engspec files (v1.0)
+├── engspec_prompt.md                  # code → engspec
+├── engspec_to_code_prompt.md          # engspec → code
+├── engspec_tester_prompt.md           # adversarial debate
+├── engspec_trace_format.md            # shared format for .trace.md files (v1.0)
+├── engspec_trace_prompt.md            # (test + impl specs) → PASS/FAIL/UNCLEAR trace
+├── engspec_verify_trace_prompt.md     # trace → TRACE_VALID/INVALID/STALE
+├── tests/
+│   └── json_pointer/                  # end-to-end pipeline smoke test
+│       ├── idea.md                    # stage-1 input
+│       ├── pipeline.md                # 8-stage runbook
+│       ├── expected_outcome.md        # success criteria
+│       └── rfc6901_vectors.md         # RFC 6901 §5 test vectors (verbatim)
 └── README.md
 ```
+
+## End-to-end smoke test
+
+`tests/json_pointer/` drives the full methodology — idea → plan → test engspec → re-plan → impl engspec → trace → verify trace → regenerate code → run tests — against a [RFC 6901](https://www.rfc-editor.org/rfc/rfc6901) JSON Pointer resolver. The RFC provides ground-truth test vectors; the pipeline finishes when every generated test passes the regenerated code. Any stage that fails identifies exactly where the methodology is weak. See `tests/json_pointer/pipeline.md` for the runbook and `tests/json_pointer/expected_outcome.md` for the success criteria.

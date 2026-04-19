@@ -1,0 +1,77 @@
+{
+  "engspec_version": "1.0",
+  "project": "json_pointer",
+  "generated": "2026-04-19T09:15:00Z",
+  "source_repo": "tests/json_pointer/ (smoke test in engspec_code)",
+  "coverage": "full",
+  "scope": {
+    "type": "all",
+    "targets": [],
+    "description": "Full project — JSON Pointer (RFC 6901) resolver"
+  },
+  "languages": ["python"],
+  "files": [
+    {
+      "spec": "specs/src/__init__.py.engspec",
+      "source": "src/json_pointer/__init__.py",
+      "type": "source",
+      "language": "python",
+      "status": "validated",
+      "regeneration_count": 1,
+      "regeneration_pass_rate": "1/1-smoke",
+      "functions": 0,
+      "file_level_sections": 1
+    },
+    {
+      "spec": "specs/src/exceptions.py.engspec",
+      "source": "src/json_pointer/exceptions.py",
+      "type": "source",
+      "language": "python",
+      "status": "validated",
+      "regeneration_count": 1,
+      "regeneration_pass_rate": "1/1-smoke",
+      "functions": 0,
+      "file_level_sections": 1
+    },
+    {
+      "spec": "specs/src/resolve.py.engspec",
+      "source": "src/json_pointer/resolve.py",
+      "type": "source",
+      "language": "python",
+      "status": "validated",
+      "regeneration_count": 1,
+      "regeneration_pass_rate": "1/1-smoke",
+      "functions": 4,
+      "file_level_sections": 1
+    },
+    {
+      "spec": "specs/tests/test_resolve.py.engspec",
+      "source": "tests/test_resolve.py",
+      "type": "test",
+      "language": "python",
+      "status": "validated",
+      "regeneration_count": 1,
+      "regeneration_pass_rate": "1/1-smoke",
+      "functions": 25,
+      "file_level_sections": 1
+    }
+  ],
+  "non_code_files": [
+    {
+      "path": "non_code/pyproject.toml",
+      "original_path": "pyproject.toml",
+      "type": "build"
+    }
+  ],
+  "external_references": [],
+  "summary": {
+    "total_specs": 4,
+    "validated": 4,
+    "failed": 0,
+    "total_functions": 29,
+    "total_file_level_sections": 4,
+    "total_regenerations": 4,
+    "total_non_code_files": 1,
+    "external_references": 0
+  }
+}
